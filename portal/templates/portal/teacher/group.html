@@ -1,0 +1,113 @@
+{% extends "portal/base.html" %}
+
+{% block title %}Группа {{ group }}{% endblock %}
+{% block page_class %}page page--wide{% endblock %}
+
+{% block content %}
+<header class="today">
+  <div>
+    <a class="today__back" href="{% url 'teacher_dashboard' %}">Все группы</a>
+    <h1 class="today__date">Группа {{ group }}</h1>
+    <p class="today__meta">Неделя {{ week_number }}: {{ week.0.date|date:"j E" }} – {{ week.5.date|date:"j E" }}</p>
+  </div>
+  {% include "portal/_fraction.html" %}
+</header>
+
+<div class="columns">
+  <div>
+    <section class="section" id="week">
+      <h2>Расписание на неделю</h2>
+      <nav class="weeknav" aria-label="Листать недели">
+        <a href="?date={{ prev_week|date:'Y-m-d' }}#week">Прошлая неделя</a>
+        <a href="?date={{ today|date:'Y-m-d' }}#week">Текущая</a>
+        <a href="?date={{ next_week|date:'Y-m-d' }}#week">Следующая неделя</a>
+      </nav>
+      {% for day in week %}
+      <div class="day-block">
+        <p class="day-block__head">
+          <span class="day__name">{{ day.weekday }}</span>
+          <span class="day__date">{{ day.date|date:"j E" }}{% if day.is_today %}, сегодня{% endif %}</span>
+        </p>
+        {% include "portal/_lessons.html" with lessons=day.lessons empty_text="Пар нет." %}
+      </div>
+      {% endfor %}
+    </section>
+  </div>
+
+  <div>
+    <section class="section" id="replacement">
+      <h2>Заменить или отменить пару</h2>
+      <p class="section__hint">Студенты увидят изменение в расписании сразу.</p>
+      <form class="form" method="post" action="{% url 'replacement_create' group.pk %}">
+        {% csrf_token %}
+        {% for error in replacement_form.non_field_errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        <div class="form__pair">
+          {% include "portal/_field.html" with field=replacement_form.date %}
+          {% include "portal/_field.html" with field=replacement_form.lesson_number %}
+        </div>
+        {% include "portal/_field.html" with field=replacement_form.is_cancelled %}
+        {% include "portal/_field.html" with field=replacement_form.subject %}
+        <div class="form__pair">
+          {% include "portal/_field.html" with field=replacement_form.room %}
+          {% include "portal/_field.html" with field=replacement_form.teacher %}
+        </div>
+        {% include "portal/_field.html" with field=replacement_form.note %}
+        <div><button class="btn" type="submit">Сохранить замену</button></div>
+      </form>
+
+      {% if replacements %}
+      <ul class="rows">
+        {% for item in replacements %}
+        <li class="row">
+          <div class="row__main">
+            <p class="row__title">{{ item.date|date:"j E" }}, {{ item.lesson_number }} пара</p>
+            <p class="row__text">{% if item.is_cancelled %}Отменена: {{ item.subject }}{% else %}{{ item.subject }}{% if item.room %}, ауд. {{ item.room }}{% endif %}{% endif %}</p>
+          </div>
+          <form method="post" action="{% url 'replacement_delete' group.pk item.pk %}">
+            {% csrf_token %}
+            <button class="btn btn--text btn--danger" type="submit">Убрать</button>
+          </form>
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </section>
+
+    <section class="section" id="homework">
+      <h2>Задать домашнее задание</h2>
+      <form class="form" method="post" action="{% url 'homework_create' group.pk %}">
+        {% csrf_token %}
+        {% include "portal/_field.html" with field=homework_form.subject %}
+        {% include "portal/_field.html" with field=homework_form.title %}
+        {% include "portal/_field.html" with field=homework_form.description %}
+        {% include "portal/_field.html" with field=homework_form.deadline %}
+        <div><button class="btn" type="submit">Добавить задание</button></div>
+      </form>
+
+      {% if homeworks %}
+      <ul class="rows">
+        {% for homework in homeworks %}
+        <li class="row">
+          <div class="row__main">
+            <p class="row__label">{{ homework.subject }}</p>
+            <p class="row__title">{{ homework.title }}</p>
+            <p class="row__due">Сдать до {{ homework.deadline|date:"j E, H:i" }}</p>
+          </div>
+          <form method="post" action="{% url 'homework_delete' group.pk homework.pk %}">
+            {% csrf_token %}
+            <button class="btn btn--text btn--danger" type="submit">Удалить</button>
+          </form>
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </section>
+
+    <section class="section">
+      <h2>Новое расписание по фото</h2>
+      <p class="section__hint">Загрузите фото или скриншот таблицы — ИИ распознает пары, а вы проверите результат перед сохранением.</p>
+      <a class="btn btn--quiet" href="{% url 'schedule_upload' group.pk %}">Загрузить фото расписания</a>
+    </section>
+  </div>
+</div>
+{% endblock %}

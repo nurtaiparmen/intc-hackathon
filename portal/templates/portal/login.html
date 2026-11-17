@@ -1,0 +1,20 @@
+{% extends "portal/base.html" %}
+
+{% block title %}Вход{% endblock %}
+{% block page_class %}login{% endblock %}
+
+{% block content %}
+<h1>{{ COLLEGE_NAME }}</h1>
+<p>Расписание, замены и домашние задания в одном месте.</p>
+
+<form class="form form--plain" method="post">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+    <p class="notice notice--error">Логин или пароль не подошли. Проверьте раскладку и попробуйте ещё раз.</p>
+  {% endif %}
+  {% include "portal/_field.html" with field=form.username %}
+  {% include "portal/_field.html" with field=form.password %}
+  <input type="hidden" name="next" value="{{ next }}">
+  <button class="btn" type="submit">Войти</button>
+</form>
+{% endblock %}

@@ -1,0 +1,286 @@
+/* Smart College Portal.
+   Три цвета со смыслом: синие чернила — основное, красная ручка — замены,
+   жёлтый маркер — пара, которая идёт сейчас. */
+
+:root {
+  --paper: #f5f7fb;
+  --sheet: #ffffff;
+  --ink: #2540b8;
+  --ink-soft: #e8ecfb;
+  --graphite: #1a2030;
+  --muted: #5a6377;
+  --rule: #d6ddea;
+  --red: #c81e35;
+  --red-soft: #fdecee;
+  --marker: #fff3a6;
+  --font: "Golos Text", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --radius: 10px;
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 1rem;
+  line-height: 1.45;
+  color: var(--graphite);
+  background: var(--paper);
+}
+
+h1, h2, h3, p { margin: 0; }
+a { color: var(--ink); }
+[hidden] { display: none !important; }
+
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* --- Каркас ---------------------------------------------------------------- */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--rule);
+  background: var(--sheet);
+}
+.topbar__name { font-weight: 600; color: var(--graphite); text-decoration: none; }
+.topbar__user { display: flex; align-items: center; gap: 0.75rem; font-size: 0.875rem; color: var(--muted); }
+.topbar__user form { margin: 0; }
+
+.page { max-width: 40rem; margin: 0 auto; padding: 0 1rem 6.5rem; }
+.page--wide { max-width: 68rem; }
+
+.section { margin-top: 2rem; }
+.section h2 { font-size: 1.25rem; line-height: 1.25; font-weight: 600; margin-bottom: 0.625rem; }
+.section__head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.25rem 1rem; }
+.hint, .section__hint { font-size: 0.875rem; color: var(--muted); }
+.section__hint { margin: -0.25rem 0 0.75rem; }
+
+.columns { display: grid; gap: 0 2.5rem; }
+@media (min-width: 60rem) {
+  .columns { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); align-items: start; }
+}
+
+/* --- Шапка дня и дробь «числитель / знаменатель» --------------------------- */
+
+.today {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 1rem;
+  padding: 1.75rem 0 0.25rem;
+}
+.today__date {
+  font-size: clamp(1.75rem, 7.5vw, 2.5rem);
+  line-height: 1.08;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.today__meta { margin-top: 0.5rem; font-size: 0.9375rem; color: var(--muted); }
+.today__back { display: inline-block; margin-bottom: 0.5rem; font-size: 0.875rem; }
+
+.fraction { display: inline-grid; justify-items: center; line-height: 1; }
+.fraction__part { padding: 0.375rem 0.25rem; font-size: 0.8125rem; color: var(--muted); opacity: 0.75; }
+.fraction__part.is-active { font-size: 1.0625rem; font-weight: 700; color: var(--ink); opacity: 1; }
+.fraction__bar { width: 100%; height: 2px; background: var(--graphite); }
+
+/* --- Пары ------------------------------------------------------------------ */
+
+.lessons, .rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.lesson {
+  display: grid;
+  grid-template-columns: 1.25rem 2.75rem minmax(0, 1fr);
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+}
+.lesson + .lesson, .row + .row { border-top: 1px solid var(--rule); }
+.lesson__num { font-size: 1.125rem; line-height: 1.3; font-weight: 700; color: var(--ink); }
+.lesson__time { padding-top: 0.125rem; font-size: 0.8125rem; line-height: 1.35; color: var(--muted); font-variant-numeric: tabular-nums; }
+.lesson__subject { font-weight: 600; }
+.lesson__meta, .lesson__note { font-size: 0.875rem; color: var(--muted); }
+.lesson__note { margin-top: 0.125rem; color: var(--graphite); }
+.lesson__now { display: inline-block; margin-top: 0.25rem; font-size: 0.8125rem; font-weight: 600; }
+
+.lesson--now { background: var(--marker); }
+.lesson--now .lesson__time, .lesson--now .lesson__meta { color: var(--graphite); }
+.lesson--replaced { box-shadow: inset 3px 0 0 var(--red); }
+.lesson--cancelled .lesson__subject { color: var(--muted); text-decoration: line-through; }
+
+.mark { font-size: 0.8125rem; font-weight: 700; color: var(--red); }
+.mark__was { font-weight: 400; color: var(--muted); text-decoration: line-through; }
+
+.empty {
+  padding: 1rem;
+  color: var(--muted);
+  background: var(--sheet);
+  border: 1px dashed var(--rule);
+  border-radius: var(--radius);
+}
+
+/* --- Строки списков: задания, замены, группы ------------------------------- */
+
+.row { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 0.75rem 1rem; }
+.row__main { min-width: 0; }
+.row__label { font-size: 0.8125rem; font-weight: 600; color: var(--ink); }
+.row__title { font-weight: 600; overflow-wrap: anywhere; }
+.row__text { font-size: 0.875rem; color: var(--muted); white-space: pre-line; overflow-wrap: anywhere; }
+.row__due { margin-top: 0.25rem; font-size: 0.8125rem; color: var(--muted); }
+.row__due--soon { font-weight: 700; color: var(--red); }
+.row form { margin: 0; flex: none; }
+a.row { color: inherit; text-decoration: none; }
+a.row:hover { background: var(--ink-soft); }
+
+/* --- Неделя ---------------------------------------------------------------- */
+
+.weeknav { display: flex; gap: 1rem; font-size: 0.875rem; margin-bottom: 0.625rem; }
+
+.day { margin-top: 0.5rem; }
+.day > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.625rem 0.25rem;
+  cursor: pointer;
+  border-bottom: 1px solid var(--rule);
+  list-style: none;
+}
+.day > summary::-webkit-details-marker { display: none; }
+.day[open] > summary { border-bottom-color: transparent; }
+.day__name { font-weight: 600; }
+.day__date { font-size: 0.875rem; color: var(--muted); }
+.day__count { margin-left: auto; font-size: 0.8125rem; color: var(--muted); }
+.day--today .day__name { color: var(--ink); }
+
+.day-block { margin-top: 1.25rem; }
+.day-block__head { display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.375rem; }
+
+/* --- Кнопки и формы -------------------------------------------------------- */
+
+.btn {
+  display: inline-block;
+  padding: 0.625rem 1rem;
+  border: 1px solid var(--ink);
+  border-radius: 8px;
+  background: var(--ink);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.2;
+  text-decoration: none;
+  cursor: pointer;
+}
+.btn:hover { background: #1c3193; }
+.btn--quiet { background: transparent; color: var(--ink); border-color: var(--rule); }
+.btn--quiet:hover { background: var(--ink-soft); }
+.btn--small { padding: 0.375rem 0.625rem; font-size: 0.8125rem; }
+.btn--text { padding: 0; border: 0; background: none; color: var(--ink); font-weight: 400; text-decoration: underline; }
+.btn--text:hover { background: none; }
+.btn--danger { color: var(--red); }
+
+.form { display: grid; gap: 0.875rem; padding: 1rem; background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--radius); }
+.form--plain { padding: 0; border: 0; background: none; }
+.form + .rows { margin-top: 0.75rem; }
+.form__pair { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+.field label { display: block; margin-bottom: 0.25rem; font-size: 0.875rem; font-weight: 600; }
+.field input:not([type="checkbox"]), .field select, .field textarea {
+  width: 100%;
+  padding: 0.5625rem 0.75rem;
+  border: 1px solid #b7c0d2;
+  border-radius: 8px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+}
+.field--check { display: flex; align-items: center; gap: 0.5rem; }
+.field--check label { margin: 0; font-weight: 400; font-size: 1rem; }
+.field--check input { width: 1.125rem; height: 1.125rem; accent-color: var(--ink); }
+.field__error, .errorlist { margin: 0.25rem 0 0; padding: 0; list-style: none; font-size: 0.875rem; color: var(--red); }
+
+.notice { margin-top: 1rem; padding: 0.75rem 1rem; border-radius: 8px; background: var(--ink-soft); box-shadow: inset 3px 0 0 var(--ink); }
+.notice--error { background: var(--red-soft); box-shadow: inset 3px 0 0 var(--red); }
+
+/* --- Вход ------------------------------------------------------------------ */
+
+.login { max-width: 22rem; margin: 0 auto; padding: 12vh 1rem 2rem; }
+.login h1 { font-size: 1.75rem; line-height: 1.15; letter-spacing: -0.01em; margin-bottom: 0.375rem; }
+.login p { color: var(--muted); margin-bottom: 1.5rem; }
+
+/* --- Проверка распознанного расписания ------------------------------------- */
+
+.table-wrap { overflow-x: auto; background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--radius); }
+.table { width: 100%; border-collapse: collapse; font-size: 0.9375rem; }
+.table th, .table td { padding: 0.5rem 0.75rem; text-align: left; vertical-align: top; border-top: 1px solid var(--rule); }
+.table thead th { border-top: 0; font-size: 0.8125rem; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.table td:first-child { font-weight: 700; color: var(--ink); }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1.25rem; margin-top: 1.5rem; }
+
+/* --- Чат-помощник ---------------------------------------------------------- */
+
+.chat-toggle {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  padding: 0.8125rem 1.25rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(37, 64, 184, 0.35);
+}
+
+.chat {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  width: min(23rem, calc(100vw - 2rem));
+  height: min(34rem, calc(100dvh - 2rem));
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  box-shadow: 0 16px 48px rgba(26, 32, 48, 0.22);
+  overflow: hidden;
+}
+@media (max-width: 30rem) {
+  .chat { left: 0.5rem; right: 0.5rem; bottom: 0.5rem; width: auto; height: min(34rem, 78dvh); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .chat { animation: chat-in 160ms ease-out; }
+  @keyframes chat-in { from { opacity: 0; transform: translateY(10px); } }
+}
+
+.chat__head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.75rem 1rem; border-bottom: 1px solid var(--rule); }
+.chat__title { font-size: 1rem; font-weight: 600; }
+.chat__log { flex: 1; display: flex; flex-direction: column; gap: 0.5rem; padding: 1rem; overflow-y: auto; }
+.chat__intro { font-size: 0.875rem; color: var(--muted); }
+.chat__chips { display: flex; flex-wrap: wrap; gap: 0.375rem; margin-top: 0.25rem; }
+.chat__form { display: flex; gap: 0.5rem; padding: 0.75rem; border-top: 1px solid var(--rule); }
+.chat__form input { flex: 1; min-width: 0; padding: 0.5625rem 0.75rem; border: 1px solid #b7c0d2; border-radius: 8px; font: inherit; }
+
+.msg { max-width: 88%; padding: 0.5rem 0.75rem; border-radius: 12px; font-size: 0.9375rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg--user { align-self: flex-end; background: var(--ink); color: #fff; border-bottom-right-radius: 4px; }
+.msg--bot, .msg--pending, .msg--error { align-self: flex-start; background: var(--paper); border-bottom-left-radius: 4px; }
+.msg--pending { color: var(--muted); }
+.msg--refused { background: var(--red-soft); }
+.msg--error { background: var(--red-soft); color: var(--red); }

@@ -1,0 +1,49 @@
+{% extends "portal/base.html" %}
+
+{% block title %}Проверка расписания{% endblock %}
+{% block page_class %}page page--wide{% endblock %}
+
+{% block content %}
+<header class="today">
+  <div>
+    <a class="today__back" href="{% url 'teacher_group' group.pk %}">Группа {{ group }}</a>
+    <h1 class="today__date">Проверьте расписание</h1>
+    <p class="today__meta">
+      Распознано пар: {{ parsed.lessons|length }}{% if parsed.group_name %}, на фото группа «{{ parsed.group_name }}»{% endif %}.
+      Сверьте с оригиналом: ИИ может ошибиться в аудитории или типе недели.
+    </p>
+  </div>
+</header>
+
+{% for day in days %}
+<section class="section">
+  <h2>{{ day.weekday }}</h2>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr><th>Пара</th><th>Время</th><th>Предмет</th><th>Ауд.</th><th>Преподаватель</th><th>Неделя</th></tr>
+      </thead>
+      <tbody>
+        {% for lesson in day.lessons %}
+        <tr>
+          <td>{{ lesson.lesson_number }}</td>
+          <td>{% if lesson.start_time %}{{ lesson.start_time }}–{{ lesson.end_time|default:"" }}{% else %}по звонкам{% endif %}</td>
+          <td>{{ lesson.subject }}</td>
+          <td>{{ lesson.room|default:"" }}</td>
+          <td>{{ lesson.teacher|default:"" }}</td>
+          <td>{% if lesson.week_type == "numerator" %}Числитель{% elif lesson.week_type == "denominator" %}Знаменатель{% else %}Каждую{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endfor %}
+
+<form class="actions" method="post">
+  {% csrf_token %}
+  <button class="btn" type="submit">Сохранить расписание группы {{ group }}</button>
+  <a href="{% url 'schedule_upload' group.pk %}">Загрузить другое фото</a>
+  <span class="hint">Текущее расписание ({{ current_count }} пар) будет заменено. Замены на даты сохранятся.</span>
+</form>
+{% endblock %}

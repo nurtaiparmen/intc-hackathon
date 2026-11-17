@@ -1,0 +1,34 @@
+{% extends "portal/base.html" %}
+
+{% block title %}Мои группы{% endblock %}
+{% block page_class %}page page--wide{% endblock %}
+
+{% block content %}
+<header class="today">
+  <div>
+    <h1 class="today__date">Мои группы</h1>
+    <p class="today__meta">{{ today_weekday }}, {{ today|date:"j E" }}, {{ today_week_number }}-я учебная неделя</p>
+  </div>
+  {% include "portal/_fraction.html" with week_type=today_week_type %}
+</header>
+
+<section class="section">
+  {% if groups %}
+  <ul class="rows">
+    {% for group in groups %}
+    <li>
+      <a class="row" href="{% url 'teacher_group' group.pk %}">
+        <div class="row__main">
+          <p class="row__title">{{ group.name }}</p>
+          <p class="row__text">Студентов: {{ group.students_count }}. Сегодня пар: {{ group.today_lessons|length }}. Активных заданий: {{ group.homework_count }}.</p>
+        </div>
+        <span class="btn btn--quiet btn--small">Открыть</span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty">За вами пока не закреплено ни одной группы. Группы привязывает администратор в админ-панели: «Пользователи», поле «Группы преподавателя».</p>
+  {% endif %}
+</section>
+{% endblock %}

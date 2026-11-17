@@ -1,0 +1,31 @@
+{% extends "portal/base.html" %}
+
+{% block title %}Расписание по фото{% endblock %}
+
+{% block content %}
+<header class="today">
+  <div>
+    <a class="today__back" href="{% url 'teacher_group' group.pk %}">Группа {{ group }}</a>
+    <h1 class="today__date">Расписание по фото</h1>
+    <p class="today__meta">ИИ прочитает таблицу и покажет, что получилось. База изменится только после вашего подтверждения.</p>
+  </div>
+</header>
+
+<section class="section">
+  <form class="form" method="post" enctype="multipart/form-data" id="upload-form">
+    {% csrf_token %}
+    {% include "portal/_field.html" with field=form.image %}
+    <p class="hint">PNG, JPEG или WebP до 8 МБ. Лучше всего читается ровный скриншот, где видны дни недели и номера пар.</p>
+    <div><button class="btn" type="submit" id="upload-button">Распознать расписание</button></div>
+  </form>
+</section>
+
+<script>
+  // Распознавание занимает до минуты: показываем, что запрос ушёл.
+  document.getElementById("upload-form").addEventListener("submit", function () {
+    const button = document.getElementById("upload-button");
+    button.disabled = true;
+    button.textContent = "Распознаю, это до минуты…";
+  });
+</script>
+{% endblock %}

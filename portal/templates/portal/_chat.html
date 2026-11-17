@@ -1,0 +1,27 @@
+{% load static %}
+<button class="chat-toggle" id="chat-toggle" type="button" aria-controls="chat">Спросить помощника</button>
+
+<section class="chat" id="chat" hidden aria-label="Помощник колледжа"
+         data-url="{% url 'student_chat' %}" data-csrf="{{ csrf_token }}">
+  <header class="chat__head">
+    <h2 class="chat__title">Помощник колледжа</h2>
+    <button class="btn btn--text chat__close" type="button">Закрыть</button>
+  </header>
+
+  <div class="chat__log" aria-live="polite">
+    <p class="chat__intro">Отвечаю на вопросы о колледже: пары, задания, сессия, каникулы, пересдачи, звонки.</p>
+    <div class="chat__chips">
+      <button class="btn btn--quiet btn--small" type="button" data-question="Какие пары у меня завтра?">Какие пары завтра?</button>
+      <button class="btn btn--quiet btn--small" type="button" data-question="Когда начинается сессия?">Когда сессия?</button>
+      <button class="btn btn--quiet btn--small" type="button" data-question="Как проходит пересдача?">Как пересдать?</button>
+    </div>
+  </div>
+
+  <form class="chat__form">
+    <input type="text" name="question" maxlength="{{ CHAT_MAX_QUESTION_LENGTH }}" autocomplete="off"
+           placeholder="Ваш вопрос" aria-label="Ваш вопрос">
+    <button class="btn" type="submit">Спросить</button>
+  </form>
+</section>
+
+<script src="{% static 'portal/chat.js' %}"></script>

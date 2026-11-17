@@ -1,0 +1,35 @@
+{% load static %}<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Портал{% endblock %} — {{ COLLEGE_NAME }}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="{% static 'portal/app.css' %}">
+</head>
+<body>
+  {% if user.is_authenticated %}
+  <header class="topbar">
+    <a class="topbar__name" href="{% url 'home' %}">{{ COLLEGE_NAME }}</a>
+    <div class="topbar__user">
+      <span>{{ user }}</span>
+      <form method="post" action="{% url 'logout' %}">
+        {% csrf_token %}
+        <button class="btn btn--text" type="submit">Выйти</button>
+      </form>
+    </div>
+  </header>
+  {% endif %}
+
+  <main class="{% block page_class %}page{% endblock %}">
+    {% for message in messages %}
+      <p class="notice{% if message.tags == 'error' %} notice--error{% endif %}" role="status">{{ message }}</p>
+    {% endfor %}
+    {% block content %}{% endblock %}
+  </main>
+
+  {% block extra %}{% endblock %}
+</body>
+</html>
