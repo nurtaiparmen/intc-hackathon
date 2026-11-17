@@ -61,6 +61,9 @@ class User(AbstractUser):
         return self.role == self.Role.TEACHER
 
     def __str__(self):
+        # «Туменов Б.Б.», если вместо имени записаны инициалы.
+        if self.first_name.endswith(".") and len(self.first_name) <= 5:
+            return f"{self.last_name} {self.first_name}"
         return self.get_full_name() or self.username
 
 
@@ -121,7 +124,8 @@ class ScheduleItem(models.Model):
 
     weekday = models.PositiveSmallIntegerField("День недели", choices=Weekday.choices)
     lesson_number = models.PositiveSmallIntegerField(
-        "Номер пары", validators=[MinValueValidator(1), MaxValueValidator(10)]
+        "Номер пары", validators=[MinValueValidator(0), MaxValueValidator(10)],
+        help_text="0 — кураторский час",
     )
     start_time = models.TimeField("Начало", null=True, blank=True)
     end_time = models.TimeField("Конец", null=True, blank=True)

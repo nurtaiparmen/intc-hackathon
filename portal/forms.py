@@ -7,7 +7,7 @@ from .utils import get_schedule
 
 def _lesson_choices():
     return [
-        (number, f"{number} пара, {start:%H:%M}")
+        (number, f"Кураторский час, {start:%H:%M}" if number == 0 else f"{number} пара, {start:%H:%M}")
         for number, (start, _end) in sorted(settings.BELL_SCHEDULE.items())
     ]
 
@@ -151,12 +151,44 @@ class HomeworkForm(forms.ModelForm):
         return deadline
 
 
+IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "image/gif"}
+EXCEL_EXT = (".xlsx", ".xlsm")
+
+
 class ScheduleTextForm(forms.Form):
-    text = forms.CharField(
-        label="Текст расписания",
-        max_length=settings.MAX_SCHEDULE_TEXT_LENGTH,
-        widget=forms.Textarea(
-            attrs={"rows": 10, "placeholder": "Скопируйте таблицу из Excel, Word или Telegram — или загрузите фото выше"}
-        ),
-        error_messages={"required": "Загрузите фото или вставьте текст расписания."},
+    """Фото/скриншот, Excel-файл или вставленный текст — что-то одно обязательно."""
+
+    file = forms.FileField(
+        label="Фото, скриншот или Excel",
+        required=False,
+        widget=forms.ClearableFileInput(attrs={"accept": "image/*,.xlsx,.xlsm"}),
     )
+    text = forms.CharField(
+        label="…или вставьте текст",
+        max_length=settings.MAX_SCHEDULE_TEXT_LENGTH,
+        required=False,
+        widget=forms.Textarea(
+            attrs={"rows": 6, "placeholder": "Скопируйте таблицу из Excel, Word или Telegram"}
+        ),
+    )
+
+    def clean_file(self):
+        upload = self.cleaned_data.get("file")
+        if not upload:
+            return None
+        if upload.size > settings.MAX_UPLOAD_MB * 1024 * 1024:
+            raise forms.ValidationError(f"Файл больше {settings.MAX_UPLOAD_MB} МБ. Сожмите фото или сделайте скриншот.")
+        name = upload.name.lower()
+        if name.endswith(EXCEL_EXT):
+            upload.kind = "excel"
+        elif (upload.content_type or "") in IMAGE_TYPES or name.endswith((".jpg", ".jpeg", ".png", ".webp", ".heic")):
+            upload.kind = "image"
+        else:
+            raise forms.ValidationError("Подходят фото (JPG, PNG, WEBP) или Excel (.xlsx).")
+        return upload
+
+    def clean(self):
+        data = super().clean()
+        if not self.errors and not data.get("file") and not (data.get("text") or "").strip():
+            raise forms.ValidationError("Загрузите фото или вставьте текст расписания.")
+        return data

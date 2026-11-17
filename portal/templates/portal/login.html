@@ -1,20 +1,64 @@
 {% extends "portal/base.html" %}
+{% load static %}
 
 {% block title %}Вход{% endblock %}
-{% block page_class %}login{% endblock %}
+{% block page_class %}login-page{% endblock %}
 
 {% block content %}
-<h1>{{ COLLEGE_NAME }}</h1>
-<p>Расписание, замены и домашние задания в одном месте.</p>
+<aside class="login-art">
+  <span class="login-logo"><img src="{% static 'portal/itc-logo.png' %}" alt="Инновационный Технический Колледж"></span>
+  <div>
+    <h2>Колледж в кармане — с ИИ внутри</h2>
+    <p>Расписание с заменами, задания и долги группы {{ COLLEGE_SHORT }}. Скинул фото расписания — ИИ сам разложил пары по дням.</p>
+    <div class="login-feats">
+      <div class="login-feat"><svg class="icon"><use href="#i-camera"/></svg>Фото или Excel расписания → готовая таблица</div>
+      <div class="login-feat"><svg class="icon"><use href="#i-sparkles"/></svg>ИИ-агент отвечает и меняет данные по просьбе</div>
+      <div class="login-feat"><svg class="icon"><use href="#i-calendar"/></svg>Левая/правая неделя и замены — сразу у всех</div>
+    </div>
+  </div>
+  <p style="opacity:.7;font-size:.85rem">NeuroHack 2026 · команда РПО6-24Р</p>
+</aside>
 
-<form class="form form--plain" method="post">
-  {% csrf_token %}
-  {% if form.non_field_errors %}
-    <p class="notice notice--error">Логин или пароль не подошли. Проверьте раскладку и попробуйте ещё раз.</p>
-  {% endif %}
-  {% include "portal/_field.html" with field=form.username %}
-  {% include "portal/_field.html" with field=form.password %}
-  <input type="hidden" name="next" value="{{ next }}">
-  <button class="btn" type="submit">Войти</button>
-</form>
+<div class="login">
+  <span class="login__logo"><img src="{% static 'portal/itc-logo.png' %}" alt="Инновационный Технический Колледж"></span>
+  <h1>Вход в {{ APP_NAME }}</h1>
+  <p class="login__lead">{{ COLLEGE_NAME }}, {{ COLLEGE_CITY }}</p>
+
+  <form class="form form--plain" method="post">
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+      <p class="notice notice--error"><svg class="icon"><use href="#i-alert"/></svg><span>Логин или пароль не подошли. Проверьте раскладку и попробуйте ещё раз.</span></p>
+    {% endif %}
+    {% include "portal/_field.html" with field=form.username %}
+    {% include "portal/_field.html" with field=form.password %}
+    <input type="hidden" name="next" value="{{ next }}">
+    <button class="btn" type="submit">Войти</button>
+  </form>
+
+  <div class="demo">
+    <p class="demo__title">Демо-входы (пароль demo12345)</p>
+    <div class="demo__row">
+      <button class="demo__btn" type="button" data-login="student">Студент · Самандар</button>
+      <button class="demo__btn" type="button" data-login="teacher">Куратор · Болатов А.</button>
+      <button class="demo__btn" type="button" data-login="admin">Админ</button>
+    </div>
+  </div>
+
+  <div class="login__foot">
+    <a href="{% url 'about' %}">О проекте</a>
+    <button class="iconbtn" type="button" data-theme-toggle aria-label="Сменить тему">
+      <svg class="icon"><use href="#i-moon" class="only-light"/><use href="#i-sun" class="only-dark"/></svg>
+    </button>
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll("[data-login]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      document.getElementById("id_username").value = b.dataset.login;
+      document.getElementById("id_password").value = "demo12345";
+      b.closest(".login").querySelector("form").submit();
+    });
+  });
+</script>
 {% endblock %}

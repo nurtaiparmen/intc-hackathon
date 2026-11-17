@@ -2,34 +2,88 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Портал{% endblock %} — {{ COLLEGE_NAME }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0a4fae">
+  <title>{% block title %}Портал{% endblock %} · {{ APP_NAME }} {{ COLLEGE_SHORT }}</title>
+  <link rel="icon" href="{% static 'portal/itc-emblem.svg' %}" type="image/svg+xml">
+  <script>
+    // Тема до отрисовки, чтобы страница не мигала белым.
+    (function () {
+      var t = null;
+      try { t = localStorage.getItem("theme"); } catch (e) {}
+      if (t !== "light" && t !== "dark") t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      document.documentElement.dataset.theme = t;
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
   <link rel="stylesheet" href="{% static 'portal/app.css' %}">
 </head>
-<body>
+<body class="{% if user.is_authenticated %}has-shell{% endif %} {% block body_class %}{% endblock %}">
+  {% include "portal/_icons.html" %}
+
   {% if user.is_authenticated %}
-  <header class="topbar">
-    <a class="topbar__name" href="{% url 'home' %}">{{ COLLEGE_NAME }}</a>
-    <div class="topbar__user">
-      <span>{{ user }}</span>
-      <form method="post" action="{% url 'logout' %}">
-        {% csrf_token %}
-        <button class="btn btn--text" type="submit">Выйти</button>
-      </form>
+  {# --- Боковое меню (компьютер) и нижнее меню (телефон) --- #}
+  <aside class="sidebar" aria-label="Меню">
+    <a class="brand" href="{% url 'home' %}">
+      <img class="brand__emblem" src="{% static 'portal/itc-emblem.svg' %}" alt="">
+      <span class="brand__text">
+        <span class="brand__name">{{ APP_NAME }}</span>
+        <span class="brand__sub">{{ COLLEGE_NAME }}</span>
+      </span>
+    </a>
+    <nav class="sidenav">
+      {% include "portal/_nav.html" with place="side" %}
+    </nav>
+    <div class="sidebar__foot">
+      <button class="sidenav__item" type="button" data-theme-toggle>
+        <svg class="icon"><use href="#i-moon" class="only-light"/><use href="#i-sun" class="only-dark"/></svg>
+        <span><span class="only-light">Тёмная тема</span><span class="only-dark">Светлая тема</span></span>
+      </button>
+      <div class="usercard">
+        <span class="avatar">{{ user.first_name|first }}{{ user.last_name|first }}</span>
+        <span class="usercard__text">
+          <span class="usercard__name">{{ user }}</span>
+          <span class="usercard__role">{% if user.is_teacher %}Преподаватель{% elif user.study_group %}Студент · {{ user.study_group }}{% else %}Администратор{% endif %}</span>
+        </span>
+        <form method="post" action="{% url 'logout' %}">
+          {% csrf_token %}
+          <button class="iconbtn" type="submit" title="Выйти" aria-label="Выйти"><svg class="icon"><use href="#i-logout"/></svg></button>
+        </form>
+      </div>
     </div>
+  </aside>
+
+  <header class="appbar">
+    <a class="brand brand--compact" href="{% url 'home' %}">
+      <img class="brand__emblem" src="{% static 'portal/itc-emblem.svg' %}" alt="">
+      <span class="brand__text">
+        <span class="brand__name">{{ APP_NAME }}</span>
+        <span class="brand__sub">{{ COLLEGE_SHORT }} · {{ COLLEGE_CITY }}</span>
+      </span>
+    </a>
+    <button class="iconbtn" type="button" data-theme-toggle aria-label="Сменить тему">
+      <svg class="icon"><use href="#i-moon" class="only-light"/><use href="#i-sun" class="only-dark"/></svg>
+    </button>
   </header>
+
+  <nav class="tabbar" aria-label="Нижнее меню">
+    {% include "portal/_nav.html" with place="tab" %}
+  </nav>
   {% endif %}
 
   <main class="{% block page_class %}page{% endblock %}">
     {% for message in messages %}
-      <p class="notice{% if message.tags == 'error' %} notice--error{% endif %}" role="status">{{ message }}</p>
+      <p class="notice{% if message.tags == 'error' %} notice--error{% endif %}" role="status">
+        <svg class="icon"><use href="{% if message.tags == 'error' %}#i-alert{% else %}#i-check{% endif %}"/></svg>
+        <span>{{ message }}</span>
+      </p>
     {% endfor %}
     {% block content %}{% endblock %}
   </main>
 
   {% block extra %}{% if user.is_teacher or user.study_group_id %}{% include "portal/_chat.html" %}{% endif %}{% endblock %}
+  <script src="{% static 'portal/app.js' %}"></script>
 </body>
 </html>

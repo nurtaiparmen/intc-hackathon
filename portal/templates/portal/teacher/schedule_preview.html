@@ -6,32 +6,32 @@
 {% block content %}
 <header class="today">
   <div>
-    <a class="today__back" href="{% url 'teacher_group' group.pk %}">Группа {{ group }}</a>
+    <a class="today__back" href="{% url 'schedule_upload' group.pk %}"><svg class="icon" style="width:16px;height:16px"><use href="#i-left"/></svg>Загрузить другое</a>
     <h1 class="today__date">Проверьте расписание</h1>
     <p class="today__meta">
-      Распознано пар: {{ parsed.lessons|length }}{% if parsed.group_name %}, на фото группа «{{ parsed.group_name }}»{% endif %}.
+      ИИ распознал пар: <b>{{ parsed.lessons|length }}</b>{% if parsed.group_name %}, на фото группа «{{ parsed.group_name }}»{% endif %}.
       Сверьте с оригиналом: ИИ может ошибиться в аудитории или в том, левая неделя или правая.
     </p>
   </div>
 </header>
 
+<div class="grid-2">
 {% for day in days %}
 <section class="section">
-  <h2>{{ day.weekday }}</h2>
+  <h2><svg class="icon"><use href="#i-calendar"/></svg>{{ day.weekday }}</h2>
   <div class="table-wrap">
     <table class="table">
       <thead>
-        <tr><th>Пара</th><th>Время</th><th>Предмет</th><th>Ауд.</th><th>Преподаватель</th><th>Неделя</th></tr>
+        <tr><th>Пара</th><th>Время</th><th>Предмет</th><th>Ауд.</th><th>Неделя</th></tr>
       </thead>
       <tbody>
         {% for lesson in day.lessons %}
         <tr>
-          <td>{{ lesson.lesson_number }}</td>
+          <td>{% if lesson.lesson_number == 0 %}КЧ{% else %}{{ lesson.lesson_number }}{% endif %}</td>
           <td>{% if lesson.start_time %}{{ lesson.start_time }}–{{ lesson.end_time|default:"" }}{% else %}по звонкам{% endif %}</td>
-          <td>{{ lesson.subject }}</td>
+          <td>{{ lesson.subject }}{% if lesson.teacher %}<br><span class="hint">{{ lesson.teacher }}</span>{% endif %}{% if lesson.note %}<br><span class="hint">{{ lesson.note }}</span>{% endif %}</td>
           <td>{{ lesson.room|default:"" }}</td>
-          <td>{{ lesson.teacher|default:"" }}</td>
-          <td>{% if lesson.week_type == "numerator" %}Левая{% elif lesson.week_type == "denominator" %}Правая{% else %}Каждую{% endif %}</td>
+          <td>{% if lesson.week_type == "numerator" %}<span class="tag tag--brand">Левая</span>{% elif lesson.week_type == "denominator" %}<span class="tag tag--brand">Правая</span>{% else %}Каждую{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -39,10 +39,11 @@
   </div>
 </section>
 {% endfor %}
+</div>
 
 <form class="actions" method="post">
   {% csrf_token %}
-  <button class="btn" type="submit">Сохранить расписание группы {{ group }}</button>
+  <button class="btn" type="submit"><svg class="icon"><use href="#i-check"/></svg>Сохранить расписание группы {{ group }}</button>
   <a href="{% url 'schedule_upload' group.pk %}">Загрузить другое фото</a>
   <span class="hint">Текущее расписание ({{ current_count }} пар) будет заменено. Замены на даты сохранятся.</span>
 </form>

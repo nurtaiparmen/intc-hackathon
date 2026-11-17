@@ -6,37 +6,54 @@
 {% block content %}
 <header class="today">
   <div>
-    <a class="today__back" href="{% url 'teacher_dashboard' %}">Все группы</a>
+    <a class="today__back" href="{% url 'teacher_dashboard' %}"><svg class="icon" style="width:16px;height:16px"><use href="#i-left"/></svg>Все группы</a>
     <h1 class="today__date">Группа {{ group }}</h1>
-    <p class="today__meta">Неделя {{ week_number }}: {{ week.0.date|date:"j E" }} – {{ week.5.date|date:"j E" }}</p>
+    <p class="today__meta">Неделя {{ week_number }}: {{ week.0.date|date:"j E" }} – {{ week.5.date|date:"j E" }} · студентов: {{ students_count }}</p>
   </div>
   {% include "portal/_fraction.html" %}
 </header>
 
+<div class="stats stats--3 section">
+  <a class="stat" href="#homework"><span class="stat__num">{{ homeworks|length }}</span><span class="stat__label">заданий в семестре</span></a>
+  <a class="stat{% if debtors %} stat--bad{% else %} stat--ok{% endif %}" href="#debtors"><span class="stat__num">{{ debtors|length }}</span><span class="stat__label">должников</span></a>
+  <a class="stat" href="#replacement"><span class="stat__num">{{ replacements|length }}</span><span class="stat__label">замен впереди</span></a>
+</div>
+
 <div class="columns">
   <div>
     <section class="section" id="week">
-      <h2>Расписание на неделю</h2>
+      <h2><svg class="icon"><use href="#i-calendar"/></svg>Расписание на неделю</h2>
       <nav class="weeknav" aria-label="Листать недели">
-        <a href="?date={{ prev_week|date:'Y-m-d' }}#week">Прошлая неделя</a>
+        <a href="?date={{ prev_week|date:'Y-m-d' }}#week"><svg class="icon"><use href="#i-left"/></svg>Прошлая</a>
         <a href="?date={{ today|date:'Y-m-d' }}#week">Текущая</a>
-        <a href="?date={{ next_week|date:'Y-m-d' }}#week">Следующая неделя</a>
+        <span class="weeknav__spacer"></span>
+        <a href="?date={{ next_week|date:'Y-m-d' }}#week">Следующая<svg class="icon"><use href="#i-right"/></svg></a>
       </nav>
       {% for day in week %}
-      <div class="day-block">
-        <p class="day-block__head">
-          <span class="day__name">{{ day.weekday }}</span>
-          <span class="day__date">{{ day.date|date:"j E" }}{% if day.is_today %}, сегодня{% endif %}</span>
-        </p>
+      <details class="day{% if day.is_today %} day--today{% endif %}" open>
+        <summary>
+          <span class="day__badge"><b>{{ day.date|date:"j" }}</b><small>{{ day.date|date:"M" }}</small></span>
+          <span><span class="day__name">{{ day.weekday }}</span><br><span class="day__date">{% if day.is_today %}сегодня{% else %}{{ day.date|date:"j E" }}{% endif %}</span></span>
+          <span class="day__count">{% if day.lessons %}пар: {{ day.lessons|length }}{% else %}выходной{% endif %}</span>
+        </summary>
         {% include "portal/_lessons.html" with lessons=day.lessons empty_text="Пар нет." %}
-      </div>
+      </details>
       {% endfor %}
     </section>
   </div>
 
   <div>
+    <section class="section">
+      <h2><svg class="icon"><use href="#i-sparkles"/></svg>Постоянное расписание</h2>
+      <p class="section__hint">Скиньте фото, скриншот или Excel — ИИ распознает пары, а вы проверите результат.</p>
+      <div class="actions actions--tight">
+        <a class="btn" href="{% url 'schedule_upload' group.pk %}"><svg class="icon"><use href="#i-camera"/></svg>Распознать через ИИ</a>
+        <a class="btn btn--quiet" href="{% url 'schedule_edit' group.pk %}"><svg class="icon"><use href="#i-edit"/></svg>Вручную</a>
+      </div>
+    </section>
+
     <section class="section" id="replacement">
-      <h2>Заменить или отменить пару</h2>
+      <h2><svg class="icon"><use href="#i-swap"/></svg>Заменить или отменить пару</h2>
       <p class="section__hint">Студенты увидят изменение в расписании сразу.</p>
       <form class="form" method="post" action="{% url 'replacement_create' group.pk %}">
         {% csrf_token %}
@@ -74,7 +91,7 @@
     </section>
 
     <section class="section" id="homework">
-      <h2>Задать домашнее задание</h2>
+      <h2><svg class="icon"><use href="#i-book"/></svg>Задать домашнее задание</h2>
       <form class="form" method="post" action="{% url 'homework_create' group.pk %}">
         {% csrf_token %}
         {% include "portal/_field.html" with field=homework_form.subject %}
@@ -107,11 +124,11 @@
     </section>
 
     <section class="section" id="debtors">
-      <h2>Должники</h2>
+      <h2><svg class="icon"><use href="#i-alert"/></svg>Должники</h2>
       {% if debtors %}
       <ul class="rows">
         {% for entry in debtors %}
-        <li class="row">
+        <li class="row row--debt">
           <div class="row__main">
             <p class="row__title">{{ entry.student }}</p>
             <p class="row__text">{% for homework in entry.debts %}{{ homework.subject }}: {{ homework.title }}{% if not forloop.last %}
@@ -124,15 +141,6 @@
       {% else %}
       <p class="empty">Долгов нет: все просроченные задания отмечены как сданные.</p>
       {% endif %}
-    </section>
-
-    <section class="section">
-      <h2>Постоянное расписание</h2>
-      <p class="section__hint">Загрузите фото или вставьте текст — ИИ распознает пары, а вы проверите результат. Или поправьте пары вручную.</p>
-      <div class="actions actions--tight">
-        <a class="btn" href="{% url 'schedule_upload' group.pk %}">Распознать через ИИ</a>
-        <a class="btn btn--quiet" href="{% url 'schedule_edit' group.pk %}">Редактировать вручную</a>
-      </div>
     </section>
   </div>
 </div>

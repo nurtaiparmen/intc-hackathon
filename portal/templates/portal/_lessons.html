@@ -3,7 +3,11 @@
 <ol class="lessons">
   {% for item in lessons %}
   <li class="lesson{% if item.is_replacement %} lesson--replaced{% endif %}{% if item.is_cancelled %} lesson--cancelled{% endif %}{% if item.is_now %} lesson--now{% endif %}">
+    {% if item.lesson_number == 0 %}
+    <span class="lesson__num lesson__num--zero" title="Кураторский час">КЧ</span>
+    {% else %}
     <span class="lesson__num" title="{{ item.lesson_number }} пара">{{ item.lesson_number }}</span>
+    {% endif %}
     <span class="lesson__time">{% if item.times.0 %}{{ item.times.0|time:"H:i" }}<br>{{ item.times.1|time:"H:i" }}{% endif %}</span>
     <div>
       <p class="lesson__subject">{{ item.subject }}</p>
@@ -11,14 +15,14 @@
         <p class="mark">Пара отменена</p>
       {% else %}
         {% if item.room or item.teacher %}
-          <p class="lesson__meta">{% if item.room %}ауд. {{ item.room }}{% endif %}{% if item.room and item.teacher %}, {% endif %}{% if item.teacher %}{{ item.teacher }}{% endif %}</p>
+          <p class="lesson__meta">{% if item.room %}<span><svg class="icon"><use href="#i-pin"/></svg>ауд. {{ item.room }}</span>{% endif %}{% if item.teacher %}<span><svg class="icon"><use href="#i-user"/></svg>{{ item.teacher }}</span>{% endif %}</p>
         {% endif %}
         {% if item.is_replacement %}
-          <p class="mark">Замена{% if item.original %} <span class="mark__was">{{ item.original.subject }}{% if item.original.room %}, ауд. {{ item.original.room }}{% endif %}</span>{% endif %}</p>
+          <p class="mark"><svg class="icon" style="width:14px;height:14px"><use href="#i-swap"/></svg>Замена{% if item.original %} <span class="mark__was">{{ item.original.subject }}{% if item.original.room %}, ауд. {{ item.original.room }}{% endif %}</span>{% endif %}</p>
         {% endif %}
       {% endif %}
       {% if item.note %}<p class="lesson__note">{{ item.note }}</p>{% endif %}
-      {% if item.is_now %}<p class="lesson__now">Идёт сейчас</p>{% endif %}
+      {% if item.is_now %}<p class="lesson__now">● Идёт сейчас</p>{% endif %}
     </div>
   </li>
   {% endfor %}

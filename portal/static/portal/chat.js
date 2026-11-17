@@ -21,8 +21,12 @@
   function setOpen(open) {
     chat.hidden = !open;
     toggle.hidden = open;
+    document.body.classList.toggle("chat-open", open);
     try { sessionStorage.setItem(openKey, open ? "1" : ""); } catch (e) {}
-    if (open) { input.focus(); log.scrollTop = log.scrollHeight; } else toggle.focus();
+    if (open) {
+      log.scrollTop = log.scrollHeight;
+      if (window.matchMedia("(min-width: 64rem)").matches) input.focus();
+    }
   }
 
   function render(item) {
@@ -60,7 +64,12 @@
 
   async function ask(question) {
     remember({ kind: "user", text: question });
-    const pending = render({ kind: "pending", text: "Думаю…" });
+    const pending = document.createElement("div");
+    pending.className = "msg msg--pending";
+    pending.setAttribute("aria-label", "ИИ думает");
+    pending.innerHTML = "<i></i><i></i><i></i>";
+    log.appendChild(pending);
+    log.scrollTop = log.scrollHeight;
     input.disabled = sendButton.disabled = true;
     let reload = false;
     try {
@@ -98,7 +107,14 @@
   saved.forEach(render);
   if (sessionStorage.getItem(openKey)) setOpen(true);
 
-  toggle.addEventListener("click", function () { setOpen(true); });
+  document.querySelectorAll("[data-chat-open]").forEach(function (button) {
+    button.addEventListener("click", function () { setOpen(chat.hidden); });
+  });
+  // Ссылка вида #ai или ?ask=... открывает чат (например, кнопки на главной).
+  if (location.hash === "#ai") setOpen(true);
+  document.querySelectorAll("[data-ask]").forEach(function (button) {
+    button.addEventListener("click", function () { setOpen(true); ask(button.dataset.ask); });
+  });
   chat.querySelector(".chat__close").addEventListener("click", function () { setOpen(false); });
   chat.querySelector(".chat__clear").addEventListener("click", function () {
     saved = [];

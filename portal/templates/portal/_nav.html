@@ -1,0 +1,43 @@
+{# Пункты меню. place = side (боковое) или tab (нижнее). #}
+{% with cls=place|yesno:"x,x" %}
+{% if user.is_teacher %}
+  {% url 'teacher_dashboard' as u_groups %}
+  <a class="navitem" href="{{ u_groups }}" data-nav="groups">
+    <svg class="icon"><use href="#i-users"/></svg><span>Группы</span>
+  </a>
+  {% if nav_group %}
+  <a class="navitem" href="{% url 'teacher_group' nav_group.pk %}" data-nav="group">
+    <svg class="icon"><use href="#i-calendar"/></svg><span>{{ nav_group.name }}</span>
+  </a>
+  <a class="navitem" href="{% url 'schedule_upload' nav_group.pk %}" data-nav="upload">
+    <svg class="icon"><use href="#i-camera"/></svg><span>Фото → ИИ</span>
+  </a>
+  {% endif %}
+  <button class="navitem navitem--ai" type="button" data-chat-open data-nav="ai">
+    <svg class="icon"><use href="#i-sparkles"/></svg><span>ИИ-агент</span>
+  </button>
+  <a class="navitem" href="{% url 'about' %}" data-nav="about">
+    <svg class="icon"><use href="#i-info"/></svg><span>О проекте</span>
+  </a>
+{% elif user.study_group_id %}
+  {% url 'student_dashboard' as u_home %}
+  <a class="navitem" href="{{ u_home }}#home" data-tab="home" data-nav="home">
+    <svg class="icon"><use href="#i-home"/></svg><span>Главная</span>
+  </a>
+  <a class="navitem" href="{{ u_home }}#week" data-tab="week" data-nav="week">
+    <svg class="icon"><use href="#i-calendar"/></svg><span>Неделя</span>
+  </a>
+  <button class="navitem navitem--ai" type="button" data-chat-open data-nav="ai">
+    <svg class="icon"><use href="#i-sparkles"/></svg><span>ИИ-агент</span>
+  </button>
+  <a class="navitem" href="{{ u_home }}#tasks" data-tab="tasks" data-nav="tasks">
+    <svg class="icon"><use href="#i-book"/></svg><span>Задания</span>
+  </a>
+  <a class="navitem" href="{{ u_home }}#profile" data-tab="profile" data-nav="profile">
+    <svg class="icon"><use href="#i-user"/></svg><span>Профиль</span>
+  </a>
+{% else %}
+  <a class="navitem" href="{% url 'admin:index' %}"><svg class="icon"><use href="#i-users"/></svg><span>Админка</span></a>
+  <a class="navitem" href="{% url 'about' %}" data-nav="about"><svg class="icon"><use href="#i-info"/></svg><span>О проекте</span></a>
+{% endif %}
+{% endwith %}

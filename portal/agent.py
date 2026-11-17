@@ -127,7 +127,10 @@ def _best_match(query: str, options: dict, what: str):
     if key in options:
         return options[key]
     if len(key) >= 4:
-        partial = [value for name, value in options.items() if key in name or name.startswith(key)]
+        partial = []  # один объект может найтись под несколькими ключами (имя+фамилия, фамилия+имя)
+        for name, value in options.items():
+            if (key in name or name.startswith(key)) and all(value is not v for v in partial):
+                partial.append(value)
         if len(partial) == 1:
             return partial[0]
     close = difflib.get_close_matches(key, options.keys(), n=1, cutoff=0.7)
@@ -391,8 +394,8 @@ def tool_mark_submissions(ctx, homework, students, group=None, submitted=True):
     else:
         options = {}
         for student in roster:
-            for key in (student.last_name, student.get_full_name(), f"{student.last_name} {student.first_name}",
-                        student.username):
+            for key in (student.last_name, student.first_name, student.get_full_name(),
+                        f"{student.last_name} {student.first_name}", student.username):
                 if key:
                     options.setdefault(_norm(key), student)
         chosen, missing = [], []
@@ -450,7 +453,7 @@ def tool_delete_regular_lesson(ctx, weekday, lesson_number, group=None, week="ev
 
 _GROUP = {"type": "string", "description": "Название группы. Можно не указывать, если у преподавателя одна группа"}
 _DATE = {"type": "string", "description": "Дата ГГГГ-ММ-ДД"}
-_PAIR = {"type": "integer", "minimum": 1, "maximum": 6, "description": "Номер пары"}
+_PAIR = {"type": "integer", "minimum": 0, "maximum": 6, "description": "Номер пары (0 — кураторский час)"}
 _WEEK = {"type": "string", "enum": ["every", "left", "right"],
          "description": "every — каждую неделю, left — только левая (числитель), right — только правая (знаменатель)"}
 _WEEKDAY = {"type": "integer", "minimum": 1, "maximum": 6, "description": "1 — понедельник … 6 — суббота"}
@@ -562,7 +565,9 @@ TEACHER_RULES = """\
 номер пары, предмет) — выполняй сразу. Если чего-то не хватает или запрос двусмысленный — \
 задай один короткий вопрос и ничего не меняй.
 6. «Я проведу», «поставь меня» — значит teacher = «{last_name}».
-7. Меняй ровно то, что просили. После действия коротко подтверди, что изменено. \
+7. Студентов передавай в инструменты так, как их назвали (имя или фамилия) — сайт найдёт сам, \
+не переспрашивай фамилии. Задание, если не знаешь его id, сначала найди через get_group_homework.
+8. Меняй ровно то, что просили. После действия коротко подтверди, что изменено. \
 Если инструмент вернул error — объясни ошибку простыми словами.
 """
 
@@ -605,6 +610,17 @@ def build_prompt(user) -> str:
 # --- Цикл агента ----------------------------------------------------------------
 
 
+def _call_dict(call) -> dict:
+    """Вызов инструмента для истории. Gemini 3 кладёт в extra_content «подпись
+    мысли» (thought_signature) — её обязательно вернуть, иначе следующий шаг упадёт."""
+    data = {"id": call.id, "type": "function",
+            "function": {"name": call.function.name, "arguments": call.function.arguments or "{}"}}
+    extra = getattr(call, "extra_content", None)
+    if extra:
+        data["extra_content"] = extra
+    return data
+
+
 def run_agent(user, question: str, history: list[dict] | None = None) -> AgentReply:
     question = " ".join(str(question).split())
     if len(question) > settings.CHAT_MAX_QUESTION_LENGTH:
@@ -633,11 +649,7 @@ def run_agent(user, question: str, history: list[dict] | None = None) -> AgentRe
             messages.append({
                 "role": "assistant",
                 "content": message.content or "",
-                "tool_calls": [
-                    {"id": c.id, "type": "function",
-                     "function": {"name": c.function.name, "arguments": c.function.arguments or "{}"}}
-                    for c in calls
-                ],
+                "tool_calls": [_call_dict(c) for c in calls],
             })
             for call in calls:
                 result = ctx.run(call.function.name, call.function.arguments)

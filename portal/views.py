@@ -13,7 +13,14 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from .agent import run_agent
-from .ai_services import AIServiceError, ParsedSchedule, apply_parsed_schedule, parse_schedule_text
+from .ai_services import (
+    AIServiceError,
+    ParsedSchedule,
+    apply_parsed_schedule,
+    excel_to_text,
+    parse_schedule_image,
+    parse_schedule_text,
+)
 from .forms import HomeworkForm, RegularLessonForm, ReplacementForm, ScheduleTextForm
 from .models import Subject, Submission, User, Weekday, WeekType
 from .utils import (
@@ -71,8 +78,10 @@ def _selected_date(request) -> date:
 
 
 def _week_context(group, selected: date) -> dict:
+    week = get_week_schedule(group, selected)
     return {
-        "week": get_week_schedule(group, selected),
+        "week": week,
+        "is_current_week": any(day["is_today"] for day in week),
         "week_type": WeekType(get_week_type(selected)),
         "week_number": get_week_number(selected),
         "prev_week": selected - timedelta(days=7),
@@ -105,9 +114,39 @@ def student_dashboard(request):
     }
     if group:
         context.update(_week_context(group, _selected_date(request)))
-        context["today_lessons"] = _mark_current_lesson(get_day_schedule(group, today))
+        lessons = _mark_current_lesson(get_day_schedule(group, today))
+        context["today_lessons"] = lessons
+        context["focus_lesson"], context["focus_kind"] = _focus_lesson(lessons)
+        context["curators"] = group.teachers.all()
+        context["classmates_count"] = group.students.count()
         context.update(student_homework_status(request.user))
     return render(request, "portal/student/dashboard.html", context)
+
+
+def _focus_lesson(lessons):
+    """Пара для главной карточки: идёт сейчас, следующая сегодня или ничего."""
+    now = timezone.localtime().time()
+    for item in lessons:
+        if getattr(item, "is_now", False):
+            return item, "now"
+    for item in lessons:
+        start, _ = item.times
+        if start and start > now and not item.is_cancelled:
+            return item, "next"
+    return None, "done" if lessons else "free"
+
+
+def about(request):
+    """О проекте: группа, куратор, команда и вклад каждого. Открыта без входа — для жюри."""
+    from . import team
+
+    return render(request, "portal/about.html", {
+        "team": team.TEAM,
+        "group_name": team.GROUP_NAME,
+        "curator": team.CURATOR,
+        "hackathon": team.HACKATHON,
+        "ai_model": settings.LLM_MODEL,
+    })
 
 
 def _chat_rate_limited(user_id: int) -> bool:
@@ -187,7 +226,7 @@ def _render_group(request, group, *, replacement_form=None, homework_form=None):
         "group": group,
         "today": today,
         "replacement_form": replacement_form
-        or ReplacementForm(group=group, initial={"date": today, "teacher": request.user}),
+        or ReplacementForm(group=group, initial={"date": today, "teacher": request.user, "lesson_number": 1}),
         "homework_form": homework_form or HomeworkForm(),
         "homeworks": semester_homeworks(group)
         .annotate(done_count=Count("submissions", distinct=True))
@@ -323,10 +362,18 @@ def _preview_key(group) -> str:
 @teacher_required
 def schedule_upload(request, group_id):
     group = _teacher_group(request, group_id)
-    form = ScheduleTextForm(request.POST or None)
+    form = ScheduleTextForm(request.POST or None, request.FILES or None)
     if request.method == "POST" and form.is_valid():
+        upload = form.cleaned_data.get("file")
         try:
-            parsed = parse_schedule_text(form.cleaned_data["text"], group_name=group.name)
+            if upload is not None and upload.kind == "image":
+                parsed = parse_schedule_image(
+                    upload.read(), upload.content_type or "image/jpeg", group_name=group.name
+                )
+            elif upload is not None:
+                parsed = parse_schedule_text(excel_to_text(upload), group_name=group.name)
+            else:
+                parsed = parse_schedule_text(form.cleaned_data["text"], group_name=group.name)
         except AIServiceError as exc:
             form.add_error(None, str(exc))
         else:

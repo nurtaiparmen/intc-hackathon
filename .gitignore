@@ -1,6 +1,14 @@
 .env
 db.sqlite3
+db_*.sqlite3
 __pycache__/
 *.pyc
 .venv/
 venv/
+staticfiles/
+_materials/
+.claude/
+.idea/
+node_modules/
+.expo/
+dist-web/

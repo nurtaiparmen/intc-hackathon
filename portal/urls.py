@@ -1,9 +1,19 @@
 from django.contrib.auth import views as auth_views
 from django.urls import path
 
-from . import views
+from . import api, views
 
 urlpatterns = [
+    # JSON API для мобильного приложения (см. API.md)
+    path("api/", api.index, name="api_index"),
+    path("api/login/", api.login, name="api_login"),
+    path("api/me/", api.me, name="api_me"),
+    path("api/today/", api.today, name="api_today"),
+    path("api/schedule/", api.schedule, name="api_schedule"),
+    path("api/week/", api.week, name="api_week"),
+    path("api/homework/", api.homework, name="api_homework"),
+    path("api/groups/", api.groups, name="api_groups"),
+    path("api/chat/", api.chat, name="api_chat"),
     # Вход и развилка по ролям
     path("", views.home, name="home"),
     path(
@@ -14,6 +24,7 @@ urlpatterns = [
         name="login",
     ),
     path("logout/", auth_views.LogoutView.as_view(), name="logout"),
+    path("about/", views.about, name="about"),
     # Студент
     path("student/", views.student_dashboard, name="student_dashboard"),
     path("chat/", views.agent_chat, name="agent_chat"),

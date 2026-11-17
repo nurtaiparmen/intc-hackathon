@@ -5,7 +5,11 @@ from datetime import date, time, timedelta
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-import httpx
+try:  # новые версии openai перешли на httpx2
+    import httpx2 as httpx
+except ImportError:
+    import httpx
+from django.conf import settings
 from django.core.cache import cache
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -131,7 +135,7 @@ class ScheduleTests(PortalTestCase):
 
     def test_times_fall_back_to_bell_schedule(self):
         first = get_day_schedule(self.group, self.MONDAY_NUM)[0]
-        self.assertEqual(first.times, (time(8, 30), time(10, 0)))
+        self.assertEqual(first.times, settings.BELL_SCHEDULE[1])
 
 
 class RoleRoutingTests(PortalTestCase):
@@ -597,3 +601,143 @@ class ScheduleEditorTests(PortalTestCase):
             reverse("home"),
             target_status_code=302,
         )
+
+
+@LLM_ON
+class VisionAndExcelTests(PortalTestCase):
+    """Версия 4: фото уходит прямо в Gemini, Excel читается openpyxl."""
+
+    def test_photo_upload_goes_to_vision_model(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        self.client.force_login(self.teacher)
+        photo = SimpleUploadedFile("schedule.png", b"\x89PNG fake", content_type="image/png")
+        patcher, client = fake_llm(text_reply(PARSED_JSON))
+        with patcher:
+            response = self.client.post(reverse("schedule_upload", args=[self.group.pk]), {"file": photo})
+        self.assertRedirects(response, reverse("schedule_preview", args=[self.group.pk]))
+        content = client.chat.completions.create.call_args.kwargs["messages"][1]["content"]
+        self.assertEqual(content[1]["type"], "image_url")
+        self.assertTrue(content[1]["image_url"]["url"].startswith("data:image/png;base64,"))
+
+    def test_wrong_file_type_is_rejected(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        self.client.force_login(self.teacher)
+        bad = SimpleUploadedFile("virus.exe", b"MZ", content_type="application/octet-stream")
+        response = self.client.post(reverse("schedule_upload", args=[self.group.pk]), {"file": bad})
+        self.assertContains(response, "Подходят фото")
+
+    def test_excel_is_converted_to_text_with_merged_days(self):
+        import io
+
+        from openpyxl import Workbook
+
+        from .ai_services import excel_to_text
+
+        book = Workbook()
+        sheet = book.active
+        sheet.append(["Понедельник", 1, "Структуры данных", "602"])
+        sheet.append([None, 2, "Физкультура", "спортзал"])
+        sheet.merge_cells("A1:A2")
+        buffer = io.BytesIO()
+        book.save(buffer)
+        buffer.seek(0)
+        text = excel_to_text(buffer)
+        self.assertIn("Понедельник | 1 | Структуры данных | 602", text)
+        self.assertIn("Понедельник | 2 | Физкультура", text)
+
+    def test_weekday_words_kazakh_and_curator_hour(self):
+        from .ai_services import ParsedLesson
+
+        lesson = ParsedLesson.model_validate(
+            {"weekday": "Сейсенбі", "lesson_number": 0, "subject": "Кураторский час", "week_type": None}
+        )
+        self.assertEqual((lesson.weekday, lesson.lesson_number, lesson.week_type), (2, 0, "every"))
+
+    def test_gemini_thought_signature_is_sent_back(self):
+        from .agent import _call_dict
+
+        call = SimpleNamespace(
+            id="c1", function=SimpleNamespace(name="get_week", arguments="{}"),
+            extra_content={"google": {"thought_signature": "abc"}},
+        )
+        self.assertEqual(_call_dict(call)["extra_content"], {"google": {"thought_signature": "abc"}})
+
+
+class AboutPageTests(TestCase):
+    def test_about_is_public_and_lists_team(self):
+        response = self.client.get(reverse("about"))
+        for name in ("Пармен Нуртай", "Алтынбек Султан", "Исмаилов Асанали", "Айтматов Самандар", "РПО6-24Р"):
+            self.assertContains(response, name)
+
+
+class FirstNameMatchTests(PortalTestCase):
+    def test_student_found_by_first_name_only(self):
+        from .agent import _best_match, _norm
+
+        s = User.objects.create_user("asanali", first_name="Асанали", last_name="Исмаилов",
+                                     role=User.Role.STUDENT, study_group=self.group)
+        options = {}
+        for key in (s.last_name, s.first_name, s.get_full_name(), f"{s.last_name} {s.first_name}", s.username):
+            options.setdefault(_norm(key), s)
+        self.assertEqual(_best_match("Асанали", options, "студент"), s)
+        self.assertEqual(_best_match("Исмаил", options, "студент"), s)
+
+
+@LLM_ON
+class ApiTests(PortalTestCase):
+    """JSON API для мобильного приложения."""
+
+    def _token(self, username, password="pass12345"):
+        user = User.objects.get(username=username)
+        user.set_password(password)
+        user.save()
+        response = self.client.post(reverse("api_login"), {"username": username, "password": password},
+                                    content_type="application/json")
+        self.assertEqual(response.status_code, 200)
+        return response.json()["token"]
+
+    def _get(self, name, token, **params):
+        return self.client.get(reverse(name), params, HTTP_AUTHORIZATION=f"Token {token}")
+
+    def test_login_errors_and_token_required(self):
+        bad = self.client.post(reverse("api_login"), {"username": "x", "password": "y"}, content_type="application/json")
+        self.assertEqual(bad.status_code, 400)
+        self.assertEqual(self.client.get(reverse("api_me")).status_code, 401)
+        self.assertEqual(self.client.get(reverse("api_me"), HTTP_AUTHORIZATION="Token мусор").status_code, 401)
+        self.assertEqual(self.client.get(reverse("api_index"))["Access-Control-Allow-Origin"], "*")
+
+    def test_student_schedule_today_homework(self):
+        ScheduleItem.objects.create(group=self.group, weekday=timezone.localdate().isoweekday(),
+                                    lesson_number=1, subject=self.math, room="204")
+        token = self._token(self.student.username)
+        me = self._get("api_me", token).json()
+        self.assertEqual((me["role"], me["group"]["name"]), ("student", self.group.name))
+        today = self._get("api_today", token).json()
+        self.assertEqual(today["lessons"][0]["subject"], "Математика")
+        self.assertIn(today["week"], {"left", "right"})
+        days = self._get("api_schedule", token, days=3).json()["days"]
+        self.assertEqual(len(days), 3)
+        self.assertTrue(self._get("api_week", token).json()["days"])
+        self.assertIn("debts", self._get("api_homework", token).json())
+        self.assertEqual(self._get("api_groups", token).status_code, 403)
+
+    def test_teacher_groups_and_foreign_group(self):
+        token = self._token(self.teacher.username)
+        self.assertEqual(self._get("api_groups", token).json()["groups"][0]["name"], self.group.name)
+        self.assertEqual(self._get("api_schedule", token, group=self.other_group.pk).status_code, 404)
+        self.assertIn("debtors", self._get("api_homework", token).json())
+
+    def test_chat_with_history(self):
+        token = self._token(self.student.username)
+        patcher, client = fake_llm(text_reply("Завтра две пары."))
+        with patcher:
+            response = self.client.post(
+                reverse("api_chat"),
+                {"question": "пары завтра?", "history": [{"role": "user", "text": "привет"}, {"role": "assistant", "text": "Привет!"}]},
+                content_type="application/json", HTTP_AUTHORIZATION=f"Token {token}",
+            )
+        self.assertEqual(response.json()["answer"], "Завтра две пары.")
+        messages = client.chat.completions.create.call_args.kwargs["messages"]
+        self.assertEqual([m["role"] for m in messages], ["system", "user", "assistant", "user"])

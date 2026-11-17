@@ -1,0 +1,75 @@
+{% extends "portal/base.html" %}
+{% load static %}
+
+{% block title %}О проекте{% endblock %}
+{% block page_class %}page page--wide{% endblock %}
+
+{% block content %}
+<section class="about-hero">
+  <span class="login-logo"><img src="{% static 'portal/itc-logo.png' %}" alt="Инновационный Технический Колледж"></span>
+  <h1>{{ APP_NAME }} — колледж в кармане с ИИ</h1>
+  <p>Проблема: расписание группы скидывают фото или Excel-файлом в чат, замены теряются в переписке, а про долги студент узнаёт в конце семестра. Решение: ИИ сам переносит фото расписания в портал, а ИИ-агент отвечает на вопросы и по просьбе преподавателя меняет данные.</p>
+  <div class="pills">
+    <span class="pill">{{ hackathon }}</span>
+    <span class="pill">Группа {{ group_name }}</span>
+    <span class="pill">Куратор: {{ curator }}</span>
+    <span class="pill">ИИ: Google Gemini</span>
+  </div>
+  {% if not user.is_authenticated %}<div class="actions"><a class="btn" style="background:#fff;color:#0a4fae;border-color:#fff" href="{% url 'login' %}">Войти в портал</a></div>{% endif %}
+</section>
+
+<section class="section">
+  <h2><svg class="icon"><use href="#i-sparkles"/></svg>Как работает ИИ</h2>
+  <div class="flow">
+    <div class="card flow__step"><svg class="icon"><use href="#i-camera"/></svg><b>1. Фото / Excel</b><span>Преподаватель загружает расписание, как его прислали в чат.</span></div>
+    <div class="card flow__step"><svg class="icon"><use href="#i-sparkles"/></svg><b>2. Gemini Vision</b><span>Модель читает таблицу и возвращает строгий JSON с парами.</span></div>
+    <div class="card flow__step"><svg class="icon"><use href="#i-check"/></svg><b>3. Проверка</b><span>Pydantic отсеивает ошибки, человек подтверждает таблицу.</span></div>
+    <div class="card flow__step"><svg class="icon"><use href="#i-users"/></svg><b>4. Агент</b><span>Отвечает студентам и выполняет команды преподавателя через 14 инструментов.</span></div>
+  </div>
+</section>
+
+<section class="section">
+  <h2><svg class="icon"><use href="#i-users"/></svg>Команда и вклад</h2>
+  <p class="section__hint">Проект передавали по цепочке: каждый брал версию предыдущего и развивал её.</p>
+  <div class="team">
+    {% for m in team %}
+    <article class="card member{% if forloop.last %} member--me{% endif %}">
+      <span class="tag tag--brand member__ver">{{ m.version }}</span>
+      <div class="member__head">
+        <span class="avatar">{{ m.initials }}</span>
+        <div>
+          <p class="member__name">{{ m.name }}</p>
+          <p class="member__role">{{ m.role }}</p>
+        </div>
+      </div>
+      <ul>{% for d in m.did %}<li>{{ d }}</li>{% endfor %}</ul>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+
+<div class="grid-2">
+  <section class="section">
+    <h2><svg class="icon"><use href="#i-flag"/></svg>Технологии</h2>
+    <div class="card kv">
+      <div class="kv__row" style="border-top:0"><span>Сервер</span><span>Python 3.12, Django 6</span></div>
+      <div class="kv__row"><span>ИИ-модель</span><span>Google Gemini ({{ ai_model }})</span></div>
+      <div class="kv__row"><span>Подключение</span><span>OpenAI-совместимый API</span></div>
+      <div class="kv__row"><span>Проверка ответов ИИ</span><span>Pydantic</span></div>
+      <div class="kv__row"><span>Excel</span><span>openpyxl</span></div>
+      <div class="kv__row"><span>Интерфейс</span><span>HTML, CSS, JS без фреймворков</span></div>
+      <div class="kv__row"><span>Хостинг</span><span>PythonAnywhere</span></div>
+    </div>
+  </section>
+  <section class="section">
+    <h2><svg class="icon"><use href="#i-cap"/></svg>Колледж</h2>
+    <div class="card kv">
+      <div class="kv__row" style="border-top:0"><span>Колледж</span><span>{{ COLLEGE_NAME }}</span></div>
+      <div class="kv__row"><span>Город</span><span>Алматы</span></div>
+      <div class="kv__row"><span>Группа</span><span>{{ group_name }}</span></div>
+      <div class="kv__row"><span>Куратор</span><span>{{ curator }}</span></div>
+      <div class="kv__row"><span>Хакатон</span><span>{{ hackathon }}, каб. 404</span></div>
+    </div>
+  </section>
+</div>
+{% endblock %}

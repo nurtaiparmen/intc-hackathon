@@ -83,11 +83,17 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"  # для PythonAnywhere: python manage.py collectstatic
+CSRF_TRUSTED_ORIGINS = [o for o in os.getenv("DJANGO_CSRF_TRUSTED", "").split(",") if o]
+DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # --- Колледж -----------------------------------------------------------------
 
-COLLEGE_NAME = os.getenv("COLLEGE_NAME", "Наш колледж")
+COLLEGE_NAME = os.getenv("COLLEGE_NAME", "Инновационный Технический Колледж")
+COLLEGE_SHORT = os.getenv("COLLEGE_SHORT", "ИТК")
+COLLEGE_CITY = os.getenv("COLLEGE_CITY", "г. Алматы")
+APP_NAME = "Smart College"
 
 # Любой день первой учебной недели семестра и тип этой недели.
 # От них считается числитель/знаменатель (см. portal/utils.py).
@@ -96,33 +102,44 @@ FIRST_WEEK_TYPE = os.getenv("FIRST_WEEK_TYPE", "numerator")  # или "denominat
 
 # Расписание звонков: номер пары -> (начало, конец).
 # Используется, когда у пары в базе не указано время.
+# 0 — кураторский час (во вторник 08:00–08:25). Во вторник пары сдвинуты на
+# 30 минут — у таких пар время хранится в самой записи расписания.
 BELL_SCHEDULE = {
-    1: (time(8, 30), time(10, 0)),
-    2: (time(10, 10), time(11, 40)),
-    3: (time(12, 10), time(13, 40)),
-    4: (time(13, 50), time(15, 20)),
-    5: (time(15, 30), time(17, 0)),
-    6: (time(17, 10), time(18, 40)),
+    0: (time(8, 0), time(8, 25)),
+    1: (time(8, 0), time(9, 20)),
+    2: (time(9, 30), time(10, 50)),
+    3: (time(11, 0), time(12, 20)),
+    4: (time(12, 30), time(13, 50)),
+    5: (time(14, 0), time(15, 20)),
+    6: (time(15, 30), time(16, 50)),
 }
 
 # База знаний чат-бота: обычный текстовый файл, правится без кода.
 COLLEGE_KNOWLEDGE_FILE = BASE_DIR / "portal" / "knowledge" / "college.md"
 
 # --- ИИ-агент ---------------------------------------------------------------
-# Любой OpenAI-совместимый API. По умолчанию Groq (бесплатный ключ:
-# https://console.groq.com/keys). Для локальной модели через Ollama:
-# LLM_BASE_URL=http://localhost:11434/v1, LLM_API_KEY=ollama, LLM_MODEL=qwen3:8b.
+# Любой OpenAI-совместимый API. По умолчанию Google Gemini (бесплатный ключ:
+# https://aistudio.google.com/apikey) — он же читает фото расписания.
+# Можно и Groq: LLM_BASE_URL=https://api.groq.com/openai/v1 (но без фото).
 # Без ключа агент работает в запасном режиме по ключевым словам.
 
-LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.groq.com/openai/v1")
-LLM_API_KEY = os.getenv("LLM_API_KEY", "")
-LLM_MODEL = os.getenv("LLM_MODEL", "llama-3.3-70b-versatile")
+GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+# Для удобства можно вписать просто GEMINI_API_KEY — тогда всё настроится само.
+_GEMINI_KEY = os.getenv("GEMINI_API_KEY", "")
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", GEMINI_BASE_URL)
+LLM_API_KEY = os.getenv("LLM_API_KEY", "") or _GEMINI_KEY
+LLM_MODEL = os.getenv("LLM_MODEL", "gemini-3.5-flash-lite")
 # Если основная модель перегружена или упёрлась в лимит, запрос уходит в следующую.
 LLM_FALLBACK_MODELS = [
     name.strip()
-    for name in os.getenv("LLM_FALLBACK_MODELS", "openai/gpt-oss-120b,qwen/qwen3-32b,llama-3.1-8b-instant").split(",")
+    for name in os.getenv(
+        "LLM_FALLBACK_MODELS", "gemini-3.1-flash-lite,gemini-3.5-flash,gemini-flash-lite-latest"
+    ).split(",")
     if name.strip()
 ]
+# Модель умеет смотреть на картинки (фото расписания уходит прямо в неё).
+LLM_VISION = os.getenv("LLM_VISION", "1") == "1"
+MAX_UPLOAD_MB = 8
 LLM_TIMEOUT_SECONDS = int(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
 LLM_RETRIES = int(os.getenv("LLM_RETRIES", "1"))
 LLM_RETRY_DELAY = float(os.getenv("LLM_RETRY_DELAY", "2"))

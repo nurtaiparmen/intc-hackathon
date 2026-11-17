@@ -1,96 +1,183 @@
 {% extends "portal/base.html" %}
 
-{% block title %}Расписание{% endblock %}
+{% block title %}Главная{% endblock %}
 
 {% block content %}
-<header class="today">
-  <div>
-    <h1 class="today__date">{{ today_weekday }}, {{ today|date:"j E" }}</h1>
-    <p class="today__meta">{{ today_week_number }}-я учебная неделя{% if group %}, группа {{ group }}{% endif %}</p>
-  </div>
-  {% include "portal/_fraction.html" with week_type=today_week_type %}
-</header>
-
 {% if not group %}
+  <header class="today"><div><h1 class="today__date">{{ today_weekday }}, {{ today|date:"j E" }}</h1></div></header>
   <section class="section">
     <p class="empty">Вас ещё не добавили в группу. Попросите куратора привязать вашу учётную запись к группе — после этого здесь появится расписание.</p>
   </section>
 {% else %}
-  <section class="section">
-    <h2>Сегодня</h2>
-    {% include "portal/_lessons.html" with lessons=today_lessons empty_text="Сегодня пар нет." %}
-  </section>
+<div data-tabs>
 
-  <section class="section" id="tasks">
-    <div class="stats">
-      <a class="stat{% if debts %} stat--bad{% endif %}" href="#debts">
-        <span class="stat__num">{{ debts|length }}</span>
-        <span class="stat__label">{% if debts %}долгов{% else %}долгов нет{% endif %}</span>
-      </a>
-      <a class="stat" href="#homework">
-        <span class="stat__num">{{ upcoming_count }}</span>
-        <span class="stat__label">заданий впереди</span>
-      </a>
-    </div>
-  </section>
-
-  {% if debts %}
-  <section class="section" id="debts">
-    <h2>Мои долги</h2>
-    <p class="section__hint">Срок прошёл, а преподаватель не отметил сдачу. Если вы уже сдали — напишите преподавателю.</p>
-    <ul class="rows">
-      {% for homework in debts %}
-      <li class="row row--debt">
-        <div class="row__main">
-          <p class="row__label">{{ homework.subject }}</p>
-          <p class="row__title">{{ homework.title }}</p>
-          <p class="row__due row__due--soon">Срок был {{ homework.deadline|date:"j E" }}{% if homework.teacher %} · {{ homework.teacher }}{% endif %}</p>
+  {# ============ ГЛАВНАЯ ============ #}
+  <div data-panel="home" id="home">
+    <section class="hero" aria-label="Сегодня">
+      <div class="hero__top">
+        <div>
+          <p class="hero__kicker">Группа {{ group }} · {{ today_week_number }}-я неделя</p>
+          <h1 class="hero__date">{{ today_weekday }}, {{ today|date:"j E" }}</h1>
+          <p class="hero__meta">Привет, {{ user.first_name|default:user }}! {% if today_lessons %}Сегодня пар: {{ today_lessons|length }}.{% else %}Сегодня пар нет — отдыхай.{% endif %}</p>
         </div>
-      </li>
-      {% endfor %}
-    </ul>
-  </section>
-  {% endif %}
+        {% include "portal/_fraction.html" with week_type=today_week_type %}
+      </div>
+      {% if focus_lesson %}
+      <div class="hero__focus">
+        <p class="hero__focus-label">{% if focus_kind == "now" %}<span class="dot"></span>Идёт сейчас{% else %}Следующая пара{% endif %}</p>
+        <p class="hero__focus-title">{{ focus_lesson.subject }}</p>
+        <p class="hero__focus-meta">
+          <span><svg class="icon"><use href="#i-clock"/></svg>{{ focus_lesson.times.0|time:"H:i" }}–{{ focus_lesson.times.1|time:"H:i" }}</span>
+          {% if focus_lesson.room %}<span><svg class="icon"><use href="#i-pin"/></svg>ауд. {{ focus_lesson.room }}</span>{% endif %}
+          {% if focus_lesson.teacher %}<span><svg class="icon"><use href="#i-user"/></svg>{{ focus_lesson.teacher }}</span>{% endif %}
+        </p>
+      </div>
+      {% elif focus_kind == "done" %}
+      <div class="hero__focus"><p class="hero__focus-title">Пары на сегодня закончились 🎉</p></div>
+      {% endif %}
+    </section>
 
-  <section class="section" id="homework">
-    <h2>Задания по предметам</h2>
-    {% for block in by_subject %}
-    <div class="subject-block">
-      <h3 class="subject-block__name">{{ block.subject }}</h3>
+    <section class="section" id="tasks-stats">
+      <div class="stats stats--3">
+        <a class="stat{% if debts %} stat--bad{% else %} stat--ok{% endif %}" href="#debts">
+          <span class="stat__num">{{ debts|length }}</span>
+          <span class="stat__label">{% if debts %}долгов{% else %}долгов нет{% endif %}</span>
+        </a>
+        <a class="stat" href="#homework">
+          <span class="stat__num">{{ upcoming_count }}</span>
+          <span class="stat__label">заданий впереди</span>
+        </a>
+        <a class="stat" href="#week">
+          <span class="stat__num">{{ today_lessons|length }}</span>
+          <span class="stat__label">пар сегодня</span>
+        </a>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2><svg class="icon"><use href="#i-sparkles"/></svg>Спроси ИИ-агента</h2>
+      <div class="quick">
+        <button class="chip" type="button" data-ask="Какие пары завтра?"><svg class="icon"><use href="#i-calendar"/></svg>Пары завтра</button>
+        <button class="chip" type="button" data-ask="Что мне сдать на этой неделе?"><svg class="icon"><use href="#i-book"/></svg>Что сдать?</button>
+        <button class="chip" type="button" data-ask="Какая сейчас неделя, левая или правая?"><svg class="icon"><use href="#i-swap"/></svg>Какая неделя?</button>
+        <button class="chip" type="button" data-ask="Как пересдать экзамен?"><svg class="icon"><use href="#i-info"/></svg>Пересдача</button>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2><svg class="icon"><use href="#i-clock"/></svg>Сегодня</h2>
+      {% include "portal/_lessons.html" with lessons=today_lessons empty_text="Сегодня пар нет." %}
+    </section>
+  </div>
+
+  {# ============ НЕДЕЛЯ ============ #}
+  <div data-panel="week" id="week">
+    <h1 class="today__date panel-title">Расписание</h1>
+    <section class="section">
+      <div class="section__head">
+        <h2><svg class="icon"><use href="#i-calendar"/></svg>Неделя {{ week_number }} · {{ week_type.label|lower }}</h2>
+      </div>
+      <nav class="weeknav" aria-label="Листать недели">
+        <a href="?date={{ prev_week|date:'Y-m-d' }}#week"><svg class="icon"><use href="#i-left"/></svg>Прошлая</a>
+        <a href="?#week">Текущая</a>
+        <span class="weeknav__spacer"></span>
+        <a href="?date={{ next_week|date:'Y-m-d' }}#week">Следующая<svg class="icon"><use href="#i-right"/></svg></a>
+      </nav>
+      {% for day in week %}
+      <details class="day{% if day.is_today %} day--today{% endif %}"{% if day.is_today or not is_current_week %} open{% endif %}>
+        <summary>
+          <span class="day__badge"><b>{{ day.date|date:"j" }}</b><small>{{ day.date|date:"M" }}</small></span>
+          <span>
+            <span class="day__name">{{ day.weekday }}</span><br>
+            <span class="day__date">{% if day.is_today %}сегодня{% else %}{{ day.date|date:"j E" }}{% endif %}</span>
+          </span>
+          <span class="day__count">{% if day.lessons %}пар: {{ day.lessons|length }}{% else %}выходной{% endif %}</span>
+        </summary>
+        {% include "portal/_lessons.html" with lessons=day.lessons empty_text="В этот день пар нет." %}
+      </details>
+      {% endfor %}
+    </section>
+  </div>
+
+  {# ============ ЗАДАНИЯ ============ #}
+  <div data-panel="tasks" id="tasks">
+    <h1 class="today__date panel-title">Задания</h1>
+    {% if debts %}
+    <section class="section" id="debts">
+      <h2><svg class="icon"><use href="#i-alert"/></svg>Мои долги</h2>
+      <p class="section__hint">Срок прошёл, а преподаватель не отметил сдачу. Если уже сдал — напиши преподавателю.</p>
       <ul class="rows">
-        {% for homework in block.items %}
-        <li class="row{% if homework.is_done %} row--done{% endif %}">
+        {% for homework in debts %}
+        <li class="row row--debt">
           <div class="row__main">
+            <p class="row__label">{{ homework.subject }}</p>
             <p class="row__title">{{ homework.title }}</p>
-            {% if homework.description %}<p class="row__text">{{ homework.description }}</p>{% endif %}
-            <p class="row__due{% if homework.is_soon and not homework.is_done %} row__due--soon{% endif %}">Сдать до {{ homework.deadline|date:"j E, H:i" }}</p>
+            <p class="row__due row__due--soon"><svg class="icon"><use href="#i-clock"/></svg>Срок был {{ homework.deadline|date:"j E" }}{% if homework.teacher %} · {{ homework.teacher }}{% endif %}</p>
           </div>
-          {% if homework.is_done %}<span class="tag tag--ok">Сдано</span>{% endif %}
+          <span class="tag tag--bad">долг</span>
         </li>
         {% endfor %}
       </ul>
-    </div>
-    {% empty %}
-    <p class="empty">Предстоящих заданий нет.</p>
-    {% endfor %}
-  </section>
+    </section>
+    {% endif %}
 
-  <section class="section" id="week">
-    <h2>Неделя {{ week_number }} · {{ week_type.label|lower }}</h2>
-    <nav class="weeknav" aria-label="Листать недели">
-      <a href="?date={{ prev_week|date:'Y-m-d' }}#week">Прошлая неделя</a>
-      <a href="?date={{ next_week|date:'Y-m-d' }}#week">Следующая неделя</a>
-    </nav>
-    {% for day in week %}
-    <details class="day{% if day.is_today %} day--today{% endif %}"{% if day.is_today %} open{% endif %}>
-      <summary>
-        <span class="day__name">{{ day.weekday }}</span>
-        <span class="day__date">{{ day.date|date:"j E" }}{% if day.is_today %}, сегодня{% endif %}</span>
-        <span class="day__count">{% if day.lessons %}пар: {{ day.lessons|length }}{% else %}пар нет{% endif %}</span>
-      </summary>
-      {% include "portal/_lessons.html" with lessons=day.lessons empty_text="В этот день пар нет." %}
-    </details>
-    {% endfor %}
-  </section>
+    <section class="section" id="homework">
+      <h2><svg class="icon"><use href="#i-book"/></svg>Задания по предметам</h2>
+      {% for block in by_subject %}
+      <div class="subject-block">
+        <h3 class="subject-block__name">{{ block.subject }}</h3>
+        <ul class="rows">
+          {% for homework in block.items %}
+          <li class="row{% if homework.is_done %} row--done{% endif %}">
+            <div class="row__main">
+              <p class="row__title">{{ homework.title }}</p>
+              {% if homework.description %}<p class="row__text">{{ homework.description }}</p>{% endif %}
+              <p class="row__due{% if homework.is_soon and not homework.is_done %} row__due--soon{% endif %}"><svg class="icon"><use href="#i-clock"/></svg>Сдать до {{ homework.deadline|date:"j E, H:i" }}</p>
+            </div>
+            {% if homework.is_done %}<span class="tag tag--ok"><svg class="icon"><use href="#i-check"/></svg>Сдано</span>{% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% empty %}
+      <p class="empty">Предстоящих заданий нет.</p>
+      {% endfor %}
+    </section>
+  </div>
+
+  {# ============ ПРОФИЛЬ ============ #}
+  <div data-panel="profile" id="profile">
+    <h1 class="today__date panel-title">Профиль</h1>
+    <section class="section">
+      <div class="card">
+        <div class="profile">
+          <span class="avatar avatar--lg">{{ user.first_name|first }}{{ user.last_name|first }}</span>
+          <div>
+            <p class="profile__name">{{ user.get_full_name|default:user.username }}</p>
+            <p class="profile__sub">Студент · {{ group }}</p>
+          </div>
+        </div>
+        <div class="kv">
+          <div class="kv__row"><span>Колледж</span><span>{{ COLLEGE_NAME }}</span></div>
+          <div class="kv__row"><span>Группа</span><span>{{ group }}, {{ group.course }} курс</span></div>
+          <div class="kv__row"><span>Куратор</span><span>{% for t in curators %}{{ t.get_full_name }}{% if not forloop.last %}, {% endif %}{% empty %}не назначен{% endfor %}</span></div>
+          <div class="kv__row"><span>Студентов в группе</span><span>{{ classmates_count }}</span></div>
+          <div class="kv__row"><span>Учебная неделя</span><span>{{ today_week_number }}-я, {{ today_week_type.label|lower }}</span></div>
+        </div>
+      </div>
+    </section>
+    <section class="section">
+      <div class="card menu-list">
+        <button type="button" data-theme-toggle><svg class="icon"><use href="#i-moon"/></svg>Тёмная тема<span class="menu-list__end"><span class="only-light">выкл</span><span class="only-dark">вкл</span></span></button>
+        <button type="button" data-chat-open><svg class="icon"><use href="#i-sparkles"/></svg>ИИ-агент</button>
+        <a href="{% url 'about' %}"><svg class="icon"><use href="#i-info"/></svg>О проекте и команде</a>
+        <form method="post" action="{% url 'logout' %}">
+          {% csrf_token %}
+          <button class="danger" type="submit"><svg class="icon"><use href="#i-logout"/></svg>Выйти</button>
+        </form>
+      </div>
+    </section>
+  </div>
+</div>
 {% endif %}
 {% endblock %}

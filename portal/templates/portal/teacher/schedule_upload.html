@@ -1,69 +1,51 @@
 {% extends "portal/base.html" %}
 
 {% block title %}Расписание через ИИ{% endblock %}
+{% block page_class %}page page--wide{% endblock %}
 
 {% block content %}
 <header class="today">
   <div>
-    <a class="today__back" href="{% url 'teacher_group' group.pk %}">Группа {{ group }}</a>
+    <a class="today__back" href="{% url 'teacher_group' group.pk %}"><svg class="icon" style="width:16px;height:16px"><use href="#i-left"/></svg>Группа {{ group }}</a>
     <h1 class="today__date">Расписание через ИИ</h1>
-    <p class="today__meta">Загрузите фото или вставьте текст. ИИ разложит пары по дням, а вы проверите результат перед сохранением.</p>
+    <p class="today__meta">Фото, скриншот из Telegram или Excel-файл — Gemini прочитает таблицу и разложит пары по дням. В базу ничего не попадёт, пока вы не подтвердите.</p>
   </div>
 </header>
 
-<section class="section">
-  <form class="form" method="post" id="upload-form">
-    {% csrf_token %}
-    {% for error in form.non_field_errors %}<p class="notice notice--error">{{ error }}</p>{% endfor %}
-    <div class="field">
-      <label for="photo">Фото или скриншот расписания</label>
-      <input type="file" id="photo" accept="image/*">
-      <p class="hint" id="ocr-status">Текст с фото считывается прямо в браузере и появится в поле ниже — его можно поправить.</p>
+<div class="columns">
+  <section class="section">
+    <form class="form" method="post" enctype="multipart/form-data" id="upload-form" data-busy="#ai-loading">
+      {% csrf_token %}
+      {% for error in form.non_field_errors %}<p class="notice notice--error"><svg class="icon"><use href="#i-alert"/></svg><span>{{ error }}</span></p>{% endfor %}
+
+      <label class="drop" data-drop>
+        <input type="file" name="{{ form.file.html_name }}" id="{{ form.file.id_for_label }}" accept="image/*,.xlsx,.xlsm">
+        <span class="drop__icon"><svg class="icon"><use href="#i-upload"/></svg></span>
+        <span class="drop__title">Выберите фото или Excel</span>
+        <span class="drop__hint">JPG, PNG, WEBP или .xlsx до 8 МБ · можно перетащить файл или вставить скриншот Ctrl+V</span>
+        <span class="drop__file" data-drop-file hidden></span>
+        <img class="drop__preview" data-drop-preview hidden alt="Предпросмотр">
+      </label>
+      {% for error in form.file.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+
+      {% include "portal/_field.html" with field=form.text %}
+
+      <div class="loading" id="ai-loading"><span class="spinner"></span>ИИ читает расписание… обычно 5–15 секунд</div>
+      <div><button class="btn" type="submit" id="upload-button"><svg class="icon"><use href="#i-sparkles"/></svg>Распознать расписание</button></div>
+    </form>
+    <p class="hint section__after">ИИ не отвечает? <a href="{% url 'schedule_edit' group.pk %}">Отредактируйте расписание вручную</a>.</p>
+  </section>
+
+  <aside class="section">
+    <div class="card card--pad">
+      <h2><svg class="icon"><use href="#i-info"/></svg>Как это работает</h2>
+      <ol class="steps">
+        <li><span><b>Вы загружаете</b> фото, скриншот или Excel, который скинули в чат группы.</span></li>
+        <li><span><b>Gemini смотрит на картинку</b> и переносит таблицу в JSON: день, пара, время, предмет, аудитория, преподаватель, левая/правая неделя.</span></li>
+        <li><span><b>Сайт проверяет ответ</b> (Pydantic): кривые строки отбрасываются, время нормализуется.</span></li>
+        <li><span><b>Вы сверяете таблицу</b> и сохраняете — студенты сразу видят новое расписание.</span></li>
+      </ol>
     </div>
-    {% include "portal/_field.html" with field=form.text %}
-    <div><button class="btn" type="submit" id="upload-button">Распознать расписание</button></div>
-  </form>
-  <p class="hint section__after">ИИ не отвечает? <a href="{% url 'schedule_edit' group.pk %}">Отредактируйте расписание вручную</a>.</p>
-</section>
-
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" defer></script>
-<script>
-  (function () {
-    const photo = document.getElementById("photo");
-    const status = document.getElementById("ocr-status");
-    const textarea = document.getElementById("{{ form.text.id_for_label }}");
-    const button = document.getElementById("upload-button");
-
-    photo.addEventListener("change", async function () {
-      const file = photo.files[0];
-      if (!file) return;
-      if (!window.Tesseract) {
-        status.textContent = "Не загрузилась библиотека распознавания (нужен интернет). Вставьте текст вручную.";
-        return;
-      }
-      button.disabled = true;
-      status.textContent = "Читаю фото…";
-      try {
-        const worker = await Tesseract.createWorker("rus+eng", 1, {
-          logger: function (m) {
-            if (m.status === "recognizing text") status.textContent = "Читаю фото: " + Math.round(m.progress * 100) + "%";
-          },
-        });
-        const result = await worker.recognize(file);
-        await worker.terminate();
-        textarea.value = result.data.text.trim();
-        status.textContent = "Готово. Проверьте текст и нажмите «Распознать расписание».";
-      } catch (error) {
-        status.textContent = "Не удалось прочитать фото. Сделайте скриншот почётче или вставьте текст.";
-      } finally {
-        button.disabled = false;
-      }
-    });
-
-    document.getElementById("upload-form").addEventListener("submit", function () {
-      button.disabled = true;
-      button.textContent = "ИИ разбирает расписание…";
-    });
-  })();
-</script>
+  </aside>
+</div>
 {% endblock %}

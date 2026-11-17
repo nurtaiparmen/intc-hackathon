@@ -4,25 +4,30 @@
 {% block page_class %}page page--wide{% endblock %}
 
 {% block content %}
-<header class="today">
-  <div>
-    <h1 class="today__date">Мои группы</h1>
-    <p class="today__meta">{{ today_weekday }}, {{ today|date:"j E" }}, {{ today_week_number }}-я учебная неделя</p>
+<section class="hero">
+  <div class="hero__top">
+    <div>
+      <p class="hero__kicker">Кабинет преподавателя · {{ today_week_number }}-я неделя</p>
+      <h1 class="hero__date">Здравствуйте, {{ user.first_name|default:user }}!</h1>
+      <p class="hero__meta">{{ today_weekday }}, {{ today|date:"j E" }}. Скиньте фото расписания или попросите ИИ-агента поставить замену.</p>
+    </div>
+    {% include "portal/_fraction.html" with week_type=today_week_type %}
   </div>
-  {% include "portal/_fraction.html" with week_type=today_week_type %}
-</header>
+</section>
 
 <section class="section">
+  <h2><svg class="icon"><use href="#i-users"/></svg>Мои группы</h2>
   {% if groups %}
   <ul class="rows">
     {% for group in groups %}
     <li>
       <a class="row" href="{% url 'teacher_group' group.pk %}">
         <div class="row__main">
+          <p class="row__label">{{ group.course }} курс</p>
           <p class="row__title">{{ group.name }}</p>
-          <p class="row__text">Студентов: {{ group.students_count }}. Сегодня пар: {{ group.today_lessons|length }}. Активных заданий: {{ group.homework_count }}. Должников: {{ group.debtors_count }}.</p>
+          <p class="row__text">Студентов: {{ group.students_count }} · сегодня пар: {{ group.today_lessons|length }} · активных заданий: {{ group.homework_count }}</p>
         </div>
-        <span class="btn btn--quiet btn--small">Открыть</span>
+        {% if group.debtors_count %}<span class="tag tag--bad">{{ group.debtors_count }} должн.</span>{% else %}<span class="tag tag--ok">без долгов</span>{% endif %}
       </a>
     </li>
     {% endfor %}
@@ -31,4 +36,33 @@
   <p class="empty">За вами пока не закреплено ни одной группы. Группы привязывает администратор в админ-панели: «Пользователи», поле «Группы преподавателя».</p>
   {% endif %}
 </section>
+
+{% with first=groups.0 %}
+{% if first %}
+<section class="section">
+  <h2><svg class="icon"><use href="#i-sparkles"/></svg>Быстрые действия</h2>
+  <div class="grid-2">
+    <a class="card card--pad row" href="{% url 'schedule_upload' first.pk %}">
+      <div class="row__main">
+        <p class="row__title">Расписание по фото или Excel</p>
+        <p class="row__text">ИИ прочитает таблицу и разложит пары по дням</p>
+      </div>
+      <svg class="icon" style="color:var(--brand)"><use href="#i-camera"/></svg>
+    </a>
+    <button class="card card--pad row" type="button" data-chat-open style="text-align:left;cursor:pointer">
+      <div class="row__main">
+        <p class="row__title">Сказать агенту</p>
+        <p class="row__text">«Отмени 3 пару в пятницу», «кто не сдал лабу?»</p>
+      </div>
+      <svg class="icon" style="color:var(--brand)"><use href="#i-sparkles"/></svg>
+    </button>
+  </div>
+</section>
+
+<section class="section">
+  <h2><svg class="icon"><use href="#i-clock"/></svg>Сегодня у {{ first.name }}</h2>
+  {% include "portal/_lessons.html" with lessons=first.today_lessons empty_text="Сегодня пар нет." %}
+</section>
+{% endif %}
+{% endwith %}
 {% endblock %}
