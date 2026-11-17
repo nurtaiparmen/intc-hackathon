@@ -25,6 +25,12 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "2af88fe2-fa7c-4339-8491-25fbc623ca91"
+      }
+    },
+    "owner": "psychodevvv"
   }
 }
