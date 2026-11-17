@@ -1,26 +1,40 @@
 {% load static %}
-<button class="chat-toggle" id="chat-toggle" type="button" aria-controls="chat">Спросить помощника</button>
+<button class="chat-toggle" id="chat-toggle" type="button" aria-controls="chat">ИИ-агент</button>
 
-<section class="chat" id="chat" hidden aria-label="Помощник колледжа"
-         data-url="{% url 'student_chat' %}" data-csrf="{{ csrf_token }}">
+<section class="chat" id="chat" hidden aria-label="ИИ-агент"
+         data-url="{% url 'agent_chat' %}" data-csrf="{{ csrf_token }}" data-user="{{ user.pk }}">
   <header class="chat__head">
-    <h2 class="chat__title">Помощник колледжа</h2>
-    <button class="btn btn--text chat__close" type="button">Закрыть</button>
+    <h2 class="chat__title">ИИ-агент</h2>
+    <div class="chat__head-actions">
+      <button class="btn btn--text chat__clear" type="button">Очистить</button>
+      <button class="btn btn--text chat__close" type="button">Закрыть</button>
+    </div>
   </header>
 
   <div class="chat__log" aria-live="polite">
-    <p class="chat__intro">Отвечаю на вопросы о колледже: пары, задания, сессия, каникулы, пересдачи, звонки.</p>
+    {% if user.is_teacher %}
+    <p class="chat__intro">Пишите обычными словами — я сам поставлю замену, отменю пару, задам задание или отмечу, кто сдал.</p>
+    {% with group=user.teaching_groups.first %}
     <div class="chat__chips">
-      <button class="btn btn--quiet btn--small" type="button" data-question="Какие пары у меня завтра?">Какие пары завтра?</button>
-      <button class="btn btn--quiet btn--small" type="button" data-question="Когда начинается сессия?">Когда сессия?</button>
-      <button class="btn btn--quiet btn--small" type="button" data-question="Как проходит пересдача?">Как пересдать?</button>
+      <button class="btn btn--quiet btn--small" type="button" data-question="Кто должники{% if group %} в {{ group.name }}{% endif %}?">Кто должники?</button>
+      <button class="btn btn--quiet btn--small" type="button" data-question="Замени завтра 2 пару на физику в 210, проведу я">Замена на завтра</button>
+      <button class="btn btn--quiet btn--small" type="button" data-question="Задай задачи 20–25 по математике до пятницы">Задать задание</button>
     </div>
+    {% endwith %}
+    {% else %}
+    <p class="chat__intro">Спрашивайте про пары, замены, задания, долги и правила колледжа.</p>
+    <div class="chat__chips">
+      <button class="btn btn--quiet btn--small" type="button" data-question="Какие пары завтра?">Какие пары завтра?</button>
+      <button class="btn btn--quiet btn--small" type="button" data-question="Какая сейчас неделя, левая или правая?">Какая неделя?</button>
+      <button class="btn btn--quiet btn--small" type="button" data-question="Есть у меня долги?">Мои долги</button>
+    </div>
+    {% endif %}
   </div>
 
   <form class="chat__form">
     <input type="text" name="question" maxlength="{{ CHAT_MAX_QUESTION_LENGTH }}" autocomplete="off"
-           placeholder="Ваш вопрос" aria-label="Ваш вопрос">
-    <button class="btn" type="submit">Спросить</button>
+           placeholder="{% if user.is_teacher %}Например: отмени 3 пару в пятницу{% else %}Ваш вопрос{% endif %}" aria-label="Ваш вопрос">
+    <button class="btn" type="submit">Отправить</button>
   </form>
 </section>
 

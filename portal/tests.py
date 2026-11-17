@@ -1,27 +1,53 @@
-"""Тесты запускаются без интернета и без ключа: вызовы Gemini подменены."""
+"""Тесты идут без интернета и без ключа: вызовы модели подменены."""
 
 import json
 from datetime import date, time, timedelta
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import httpx
 from django.core.cache import cache
-from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
+from openai import APIStatusError
 
-from . import ai_services
-from .ai_services import (
-    REFUSAL_TEXT,
-    AIServiceError,
-    BotAnswer,
-    ParsedSchedule,
-    apply_parsed_schedule,
-    ask_college_bot,
-    parse_schedule_image,
+from . import llm
+from .agent import AgentContext, parse_day, run_agent
+from .ai_services import AIServiceError, ParsedSchedule, apply_parsed_schedule, parse_schedule_text
+from .models import Group, Homework, ScheduleItem, Subject, Submission, User, WeekType
+from .utils import get_day_schedule, get_week_number, get_week_type, group_debtors, student_homework_status
+
+LLM_ON = override_settings(
+    LLM_API_KEY="test-key", LLM_MODEL="main-model", LLM_FALLBACK_MODELS=["spare-model"],
+    LLM_RETRIES=1, LLM_RETRY_DELAY=0,
 )
-from .models import Group, Homework, ScheduleItem, Subject, User, WeekType
-from .utils import build_student_context, get_day_schedule, get_week_number, get_week_type
+
+
+def text_reply(text):
+    return SimpleNamespace(content=text, tool_calls=None)
+
+
+def tool_reply(name, arguments, call_id="call-1"):
+    call = SimpleNamespace(id=call_id, function=SimpleNamespace(name=name, arguments=json.dumps(arguments, ensure_ascii=False)))
+    return SimpleNamespace(content="", tool_calls=[call])
+
+
+def status_error(code):
+    request = httpx.Request("POST", "https://llm.test/chat/completions")
+    return APIStatusError("error", response=httpx.Response(code, request=request), body=None)
+
+
+def fake_llm(*replies):
+    """Подмена клиента: каждый вызов create() отдаёт следующий ответ или бросает ошибку."""
+    client = MagicMock()
+    effects = [
+        reply if isinstance(reply, Exception) else SimpleNamespace(choices=[SimpleNamespace(message=reply)])
+        for reply in replies
+    ]
+    client.chat.completions.create.side_effect = effects
+    llm.get_client.cache_clear()
+    return patch.object(llm, "get_client", return_value=client), client
 
 
 @override_settings(SEMESTER_START=date(2026, 9, 1), FIRST_WEEK_TYPE="numerator")
@@ -203,13 +229,6 @@ class TeacherActionsTests(PortalTestCase):
         self.assertContains(self.client.get(reverse("student_dashboard")), "Задачи 1–5")
 
 
-def fake_gemini(text):
-    """Подмена клиента Gemini: generate_content() возвращает ответ с .text."""
-    client = MagicMock()
-    client.models.generate_content.return_value = MagicMock(text=text)
-    return patch.object(ai_services, "_get_client", return_value=client), client
-
-
 PARSED_JSON = json.dumps(
     {
         "group_name": "ПО-21",
@@ -228,25 +247,53 @@ PARSED_JSON = json.dumps(
 )
 
 
-class ScheduleParsingTests(PortalTestCase):
-    def test_parse_validates_and_normalizes(self):
-        patcher, client = fake_gemini(PARSED_JSON)
+REFUSAL = "Я отвечаю только на вопросы, связанные с нашим колледжем."
+
+
+@LLM_ON
+class LLMClientTests(PortalTestCase):
+    def test_overload_is_retried_then_fallback_model_is_used(self):
+        patcher, client = fake_llm(status_error(503), status_error(503), text_reply("ok"))
         with patcher:
-            parsed = parse_schedule_image(b"fake-image", "image/png", group_name="ПО-21")
+            self.assertEqual(llm.complete([{"role": "user", "content": "hi"}]).content, "ok")
+        models = [call.kwargs["model"] for call in client.chat.completions.create.call_args_list]
+        self.assertEqual(models, ["main-model", "main-model", "spare-model"])
+
+    def test_all_models_down_gives_readable_error(self):
+        patcher, client = fake_llm(*[status_error(503)] * 4)
+        with patcher, self.assertRaisesMessage(llm.LLMError, "не отвечает"):
+            llm.complete([{"role": "user", "content": "hi"}])
+        self.assertEqual(client.chat.completions.create.call_count, 4)
+
+    def test_bad_key_stops_immediately(self):
+        patcher, client = fake_llm(status_error(401))
+        with patcher, self.assertRaisesMessage(llm.LLMError, "Ключ"):
+            llm.complete([{"role": "user", "content": "hi"}])
+        self.assertEqual(client.chat.completions.create.call_count, 1)
+
+    def test_thinking_tags_are_removed(self):
+        self.assertEqual(llm.clean_text("<think>хм</think> Ответ"), "Ответ")
+
+
+@LLM_ON
+class ScheduleParsingTests(PortalTestCase):
+    def test_parse_validates_normalizes_and_skips_broken_rows(self):
+        data = json.loads(PARSED_JSON)
+        data["lessons"].append({"weekday": 9, "lesson_number": 1, "subject": "Мусор"})
+        patcher, client = fake_llm(text_reply("```json\n" + json.dumps(data, ensure_ascii=False) + "\n```"))
+        with patcher:
+            parsed = parse_schedule_text("Пн 1 Математика 204", group_name="ПО-21")
         self.assertEqual(len(parsed.lessons), 4)
         self.assertEqual(parsed.lessons[0].start_time, "08:30")
-        self.assertIsNone(parsed.lessons[1].room)
-
-        call = client.models.generate_content.call_args.kwargs
-        self.assertEqual(call["config"].response_mime_type, "application/json")
-        self.assertIn("lessons", call["config"].response_json_schema["properties"])
-        self.assertEqual(call["contents"][0].inline_data.mime_type, "image/png")
+        call = client.chat.completions.create.call_args.kwargs
+        self.assertEqual(call["response_format"], {"type": "json_object"})
+        self.assertIn("ПО-21", call["messages"][1]["content"])
 
     def test_invalid_or_empty_answer_raises_friendly_error(self):
-        for answer in ("не json", '{"group_name": null, "lessons": []}', ""):
-            patcher, _ = fake_gemini(answer)
+        for answer in ("не json", '{"group_name": null, "lessons": []}'):
+            patcher, _ = fake_llm(text_reply(answer))
             with patcher, self.assertRaises(AIServiceError):
-                parse_schedule_image(b"fake-image", "image/png")
+                parse_schedule_text("текст")
 
     def test_apply_replaces_regular_schedule_and_keeps_replacements(self):
         ScheduleItem.objects.create(group=self.group, weekday=3, lesson_number=1, subject=self.math)
@@ -272,120 +319,281 @@ class ScheduleParsingTests(PortalTestCase):
         self.client.force_login(self.teacher)
         upload_url = reverse("schedule_upload", args=[self.group.pk])
         preview_url = reverse("schedule_preview", args=[self.group.pk])
-        image = SimpleUploadedFile("schedule.png", b"fake-image", content_type="image/png")
-
-        patcher, _ = fake_gemini(PARSED_JSON)
+        patcher, _ = fake_llm(text_reply(PARSED_JSON))
         with patcher:
-            response = self.client.post(upload_url, {"image": image})
+            response = self.client.post(upload_url, {"text": "Пн: 1 Математика 204"})
         self.assertRedirects(response, preview_url)
-        self.assertFalse(self.group.schedule_items.exists())  # до подтверждения база не тронута
+        self.assertFalse(self.group.schedule_items.exists())
 
         self.assertContains(self.client.get(preview_url), "Веб-разработка")
-        self.assertRedirects(
-            self.client.post(preview_url), reverse("teacher_group", args=[self.group.pk])
-        )
+        self.assertRedirects(self.client.post(preview_url), reverse("teacher_group", args=[self.group.pk]))
         self.assertEqual(self.group.schedule_items.count(), 3)
 
-    def test_upload_rejects_non_image(self):
+    def test_empty_upload_asks_for_photo_or_text(self):
         self.client.force_login(self.teacher)
-        file = SimpleUploadedFile("notes.txt", b"hello", content_type="text/plain")
-        response = self.client.post(reverse("schedule_upload", args=[self.group.pk]), {"image": file})
-        self.assertContains(response, "Нужна картинка")
+        response = self.client.post(reverse("schedule_upload", args=[self.group.pk]), {"text": ""})
+        self.assertContains(response, "Загрузите фото или вставьте текст")
 
 
-class ChatBotTests(PortalTestCase):
-    def test_prompt_contains_guardrail_knowledge_and_student_context(self):
-        patcher, client = fake_gemini("Сессия начинается 14 декабря.")
+class AgentToolTests(PortalTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.student.first_name, cls.student.last_name = "Алексей", "Смирнов"
+        cls.student.save()
+        ScheduleItem.objects.create(group=cls.group, weekday=1, lesson_number=2, subject=cls.math, room="204")
+        cls.monday = timezone.localdate() + timedelta(days=(1 - timezone.localdate().isoweekday()) % 7 or 7)
+
+    def run_tool(self, user, name, **arguments):
+        return AgentContext(user).run(name, json.dumps(arguments, ensure_ascii=False))
+
+    def test_parse_day(self):
+        today = timezone.localdate()
+        self.assertEqual(parse_day("завтра"), today + timedelta(days=1))
+        self.assertEqual(parse_day("2026-12-01"), date(2026, 12, 1))
+        self.assertEqual(parse_day("01.12.2026"), date(2026, 12, 1))
+        self.assertEqual(parse_day("понедельник").isoweekday(), 1)
+
+    def test_student_reads_schedule_of_own_group(self):
+        result = self.run_tool(self.student, "get_schedule", date=self.monday.isoformat())
+        self.assertEqual(result["group"], "ПО-21")
+        self.assertEqual(result["days"][0]["lessons"][0]["subject"], "Математика")
+
+    def test_student_cannot_use_teacher_tools(self):
+        result = self.run_tool(self.student, "make_replacement", date=self.monday.isoformat(),
+                               lesson_number=2, subject="Физика")
+        self.assertIn("error", result)
+        self.assertFalse(ScheduleItem.objects.filter(is_replacement=True).exists())
+
+    def test_teacher_makes_replacement_with_fuzzy_subject_and_self(self):
+        ctx = AgentContext(self.teacher)
+        result = ctx.run("make_replacement", json.dumps(
+            {"date": self.monday.isoformat(), "lesson_number": 2, "subject": "физику", "teacher": "я", "room": "305"}
+        ))
+        self.assertTrue(result["ok"], result)
+        item = ScheduleItem.objects.get(is_replacement=True)
+        self.assertEqual((item.subject, item.teacher, item.room), (self.physics, self.teacher, "305"))
+        self.assertIn("Замена", ctx.actions[0])
+        lessons = get_day_schedule(self.group, self.monday)
+        self.assertEqual(lessons[0].subject, self.physics)
+
+    def test_teacher_cancels_and_restores_lesson(self):
+        self.assertTrue(self.run_tool(self.teacher, "cancel_lesson", date=self.monday.isoformat(), lesson_number=2)["ok"])
+        self.assertTrue(get_day_schedule(self.group, self.monday)[0].is_cancelled)
+        self.assertTrue(self.run_tool(self.teacher, "remove_replacement", date=self.monday.isoformat(), lesson_number=2)["ok"])
+        self.assertFalse(get_day_schedule(self.group, self.monday)[0].is_replacement)
+
+    def test_form_validation_reaches_the_model(self):
+        result = self.run_tool(self.teacher, "cancel_lesson", date=self.monday.isoformat(), lesson_number=5)
+        self.assertIn("отменять нечего", result["error"])
+        result = self.run_tool(self.teacher, "cancel_lesson", date="2020-01-01", lesson_number=2)
+        self.assertIn("прошла", result["error"])
+
+    def test_teacher_cannot_touch_foreign_group(self):
+        result = self.run_tool(self.teacher, "get_debtors", group="ИС-11")
+        self.assertIn("не закреплена", result["error"])
+
+    def test_add_homework_and_mark_submission(self):
+        deadline = (timezone.localdate() + timedelta(days=3)).isoformat()
+        result = self.run_tool(self.teacher, "add_homework", subject="математика", title="Задачи 20–25", deadline=deadline)
+        homework = Homework.objects.get()
+        self.assertEqual((homework.subject, homework.teacher), (self.math, self.teacher))
+        self.assertEqual(timezone.localtime(homework.deadline).hour, 18)
+
+        result = self.run_tool(self.teacher, "mark_submissions", homework="задачи 20", students=["Смирнов"])
+        self.assertEqual(result["submitted_now"], "1 из 1")
+        self.assertTrue(Submission.objects.filter(homework=homework, student=self.student).exists())
+        result = self.run_tool(self.teacher, "mark_submissions", homework=str(homework.pk), students=["Петров"])
+        self.assertIn("Не нашёл", result["error"])
+
+    def test_set_and_delete_regular_lesson(self):
+        result = self.run_tool(self.teacher, "set_regular_lesson", weekday=3, lesson_number=1,
+                               subject="Физика", week="left", room="210")
+        self.assertTrue(result["ok"], result)
+        self.assertTrue(self.group.schedule_items.filter(weekday=3, week_type=WeekType.NUMERATOR).exists())
+        self.assertTrue(self.run_tool(self.teacher, "delete_regular_lesson", weekday=3, lesson_number=1, week="left")["ok"])
+
+
+@LLM_ON
+class AgentLoopTests(PortalTestCase):
+    def test_agent_calls_tool_then_answers(self):
+        tomorrow = (timezone.localdate() + timedelta(days=1)).isoformat()
+        patcher, client = fake_llm(
+            tool_reply("get_schedule", {"date": tomorrow}),
+            text_reply("Завтра пар нет, отдыхай."),
+        )
         with patcher:
-            answer = ask_college_bot("Когда сессия?", student_context="Группа ПО-21")
-        self.assertEqual(answer, BotAnswer("Сессия начинается 14 декабря.", is_refusal=False))
+            reply = run_agent(self.student, "чё по парам завтра")
+        self.assertEqual(reply.text, "Завтра пар нет, отдыхай.")
+        second_call = client.chat.completions.create.call_args_list[1].kwargs["messages"]
+        self.assertEqual(second_call[-1]["role"], "tool")
+        self.assertIn("ПО-21", second_call[-1]["content"])
+        tool_names = {t["function"]["name"] for t in client.chat.completions.create.call_args.kwargs["tools"]}
+        self.assertNotIn("make_replacement", tool_names)
 
-        config = client.models.generate_content.call_args.kwargs["config"]
-        self.assertIn(REFUSAL_TEXT, config.system_instruction)
-        self.assertIn("Зимняя сессия", config.system_instruction)  # из базы знаний
-        self.assertIn("Группа ПО-21", config.system_instruction)
-        self.assertEqual(config.max_output_tokens, 1024)
-
-    def test_refusal_is_detected(self):
-        patcher, _ = fake_gemini(REFUSAL_TEXT)
+    def test_teacher_action_is_reported(self):
+        ScheduleItem.objects.create(group=self.group, weekday=timezone.localdate().isoweekday(), lesson_number=1, subject=self.math)
+        patcher, _ = fake_llm(
+            tool_reply("cancel_lesson", {"date": timezone.localdate().isoformat(), "lesson_number": 1}),
+            text_reply("Готово, 1 пара сегодня отменена."),
+        )
         with patcher:
-            self.assertTrue(ask_college_bot("Какая погода в Алматы?").is_refusal)
+            reply = run_agent(self.teacher, "отмени сегодня первую пару")
+        self.assertEqual(len(reply.actions), 1)
+        self.assertIn("Отменена", reply.actions[0])
+
+    def test_prompt_has_dates_week_side_and_knowledge(self):
+        patcher, client = fake_llm(text_reply(REFUSAL))
+        with patcher:
+            reply = run_agent(self.student, "расскажи анекдот")
+        system = client.chat.completions.create.call_args.kwargs["messages"][0]["content"]
+        self.assertIn(timezone.localdate().isoformat(), system)
+        self.assertIn("левая", system)
+        self.assertIn("Пересдачи", system)
+        self.assertTrue(reply.is_refusal)
+
+    def test_llm_failure_falls_back_to_offline_answer(self):
+        patcher, _ = fake_llm(*[status_error(503)] * 4)
+        with patcher:
+            reply = run_agent(self.student, "какая сейчас неделя")
+        self.assertTrue(reply.offline)
+        self.assertIn("учебная неделя", reply.text)
 
     def test_too_long_question_never_reaches_llm(self):
-        patcher, client = fake_gemini("ответ")
+        patcher, client = fake_llm()
         with patcher:
-            answer = ask_college_bot("а" * 501)
-        self.assertTrue(answer.is_refusal)
-        client.models.generate_content.assert_not_called()
+            reply = run_agent(self.student, "а" * 600)
+        self.assertTrue(reply.is_refusal)
+        client.chat.completions.create.assert_not_called()
 
-    def test_history_is_trimmed(self):
-        history = [{"role": "user" if i % 2 == 0 else "model", "text": str(i)} for i in range(20)]
-        patcher, client = fake_gemini("ок")
+
+@override_settings(LLM_API_KEY="")
+class OfflineAgentTests(PortalTestCase):
+    def test_schedule_week_and_help(self):
+        ScheduleItem.objects.create(group=self.group, weekday=timezone.localdate().isoweekday(), lesson_number=1,
+                                    subject=self.math, room="204")
+        reply = run_agent(self.student, "какие пары сегодня?")
+        self.assertTrue(reply.offline)
+        self.assertIn("Математика, ауд. 204", reply.text)
+        self.assertIn("неделя", run_agent(self.student, "какая неделя").text)
+        self.assertIn("простые вопросы", run_agent(self.student, "привет").text)
+
+    def test_teacher_sees_debtors(self):
+        self.assertIn("ПО-21", run_agent(self.teacher, "кто должники?").text)
+
+
+class AgentEndpointTests(PortalTestCase):
+    url = reverse("agent_chat")
+
+    def post(self, question):
+        return self.client.post(self.url, json.dumps({"question": question}), content_type="application/json")
+
+    @LLM_ON
+    def test_answer_actions_and_history(self):
+        self.client.force_login(self.teacher)
+        patcher, _ = fake_llm(text_reply("Ваша группа: ПО-21."))
         with patcher:
-            ask_college_bot("вопрос", history=history)
-        contents = client.models.generate_content.call_args.kwargs["contents"]
-        self.assertEqual(len(contents), 2 * 3 + 1)  # CHAT_HISTORY_TURNS пар + новый вопрос
-        self.assertEqual(contents[-1].parts[0].text, "вопрос")
+            data = self.post("мои группы").json()
+        self.assertEqual((data["answer"], data["actions"], data["offline"]), ("Ваша группа: ПО-21.", [], False))
+        self.assertEqual(len(self.client.session["chat_history"]), 2)
 
-    @override_settings(GEMINI_API_KEY="")
-    def test_missing_key_gives_clear_error(self):
-        ai_services._get_client.cache_clear()
-        with self.assertRaisesMessage(AIServiceError, "GEMINI_API_KEY"):
-            ask_college_bot("Когда сессия?")
-
-    def test_student_context_lists_schedule_and_homework(self):
-        today = timezone.localdate()
-        ScheduleItem.objects.create(
-            group=self.group, weekday=today.isoweekday(), lesson_number=1,
-            subject=self.math, room="204",
-        )
-        Homework.objects.create(
-            group=self.group, subject=self.math, title="Задачи 1–5",
-            deadline=timezone.now() + timedelta(days=1),
-        )
-        context = build_student_context(self.student)
-        for expected in ("ПО-21", "Математика", "ауд. 204", "Задачи 1–5"):
-            self.assertIn(expected, context)
-
-
-class ChatEndpointTests(PortalTestCase):
-    def _ask(self, question):
-        return self.client.post(
-            reverse("student_chat"), json.dumps({"question": question}), content_type="application/json"
-        )
-
-    def test_answer_and_history(self):
-        self.client.force_login(self.student)
-        with patch("portal.views.ask_college_bot", return_value=BotAnswer("14 декабря")) as bot:
-            response = self._ask("Когда сессия?")
-            self._ask("А каникулы?")
-        self.assertEqual(response.json(), {"answer": "14 декабря", "refused": False})
-        # Второй вопрос ушёл уже с историей первого.
-        self.assertEqual(len(bot.call_args.kwargs["history"]), 2)
-
-    def test_refusal_is_not_saved_to_history(self):
-        self.client.force_login(self.student)
-        with patch("portal.views.ask_college_bot", return_value=BotAnswer(REFUSAL_TEXT, True)):
-            response = self._ask("Напиши код на Python")
-        self.assertEqual(response.json(), {"answer": REFUSAL_TEXT, "refused": True})
-        self.assertNotIn("chat_history", self.client.session)
-
-    @override_settings(CHAT_RATE_LIMIT=2)
+    @override_settings(LLM_API_KEY="", CHAT_RATE_LIMIT=2)
     def test_rate_limit(self):
         self.client.force_login(self.student)
-        with patch("portal.views.ask_college_bot", return_value=BotAnswer("ок")) as bot:
-            statuses = [self._ask("Когда сессия?").status_code for _ in range(3)]
+        statuses = [self.post("какая неделя").status_code for _ in range(3)]
         self.assertEqual(statuses, [200, 200, 429])
-        self.assertEqual(bot.call_count, 2)
 
-    def test_ai_failure_returns_readable_error(self):
+    def test_get_and_anonymous_are_rejected(self):
+        self.assertEqual(self.client.get(self.url).status_code, 302)
         self.client.force_login(self.student)
-        with patch("portal.views.ask_college_bot", side_effect=AIServiceError("ИИ недоступен")):
-            response = self._ask("Когда сессия?")
-        self.assertEqual((response.status_code, response.json()), (503, {"error": "ИИ недоступен"}))
+        self.assertEqual(self.client.get(self.url).status_code, 405)
 
-    def test_teacher_and_get_are_rejected(self):
+    def test_chat_widget_on_pages(self):
         self.client.force_login(self.teacher)
-        self.assertEqual(self._ask("вопрос").status_code, 302)
+        self.assertContains(self.client.get(reverse("teacher_dashboard")), "ИИ-агент")
         self.client.force_login(self.student)
-        self.assertEqual(self.client.get(reverse("student_chat")).status_code, 405)
+        self.assertContains(self.client.get(reverse("student_dashboard")), "ИИ-агент")
+
+
+@override_settings(SEMESTER_START=date(2026, 1, 1))
+class DebtTests(PortalTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.classmate = User.objects.create_user(
+            "classmate", password="pass12345", role=User.Role.STUDENT, study_group=cls.group, last_name="Ким"
+        )
+        now = timezone.now()
+        cls.overdue = Homework.objects.create(
+            group=cls.group, subject=cls.math, title="Старая задача", deadline=now - timedelta(days=3)
+        )
+        cls.future = Homework.objects.create(
+            group=cls.group, subject=cls.physics, title="Новая задача", deadline=now + timedelta(days=3)
+        )
+        Submission.objects.create(homework=cls.overdue, student=cls.classmate)
+
+    def test_overdue_without_mark_is_a_debt(self):
+        status = student_homework_status(self.student)
+        self.assertEqual([h.title for h in status["debts"]], ["Старая задача"])
+        self.assertEqual(status["by_subject"][0]["subject"], "Физика")
+        self.assertEqual([entry["student"] for entry in group_debtors(self.group)], [self.student])
+
+    def test_student_sees_debts_and_bot_knows_them(self):
+        self.client.force_login(self.student)
+        response = self.client.get(reverse("student_dashboard"))
+        self.assertContains(response, "Мои долги")
+        self.assertContains(response, "Старая задача")
+        result = AgentContext(self.student).run("get_my_debts", "{}")
+        self.assertEqual(result["debts"][0]["title"], "Старая задача")
+
+    def test_teacher_marks_submission_and_debt_disappears(self):
+        self.client.force_login(self.teacher)
+        url = reverse("homework_check", args=[self.group.pk, self.overdue.pk])
+        self.assertContains(self.client.get(url), "сдали 1 из 2")
+        outsider = User.objects.create_user("outsider", role=User.Role.STUDENT, study_group=self.other_group)
+        response = self.client.post(url, {"done": [self.student.pk, outsider.pk]})
+        self.assertRedirects(response, reverse("teacher_group", args=[self.group.pk]))
+        self.assertEqual(
+            set(self.overdue.submissions.values_list("student_id", flat=True)), {self.student.pk}
+        )
+        self.assertEqual(student_homework_status(self.student)["debts"], [])
+        self.assertEqual([e["student"] for e in group_debtors(self.group)], [self.classmate])
+
+    def test_teacher_group_page_lists_debtors(self):
+        self.client.force_login(self.teacher)
+        response = self.client.get(reverse("teacher_group", args=[self.group.pk]))
+        self.assertContains(response, "Должники")
+        self.assertContains(response, "сдали 1 из 2")
+
+
+class ScheduleEditorTests(PortalTestCase):
+    def test_add_update_and_delete_regular_lesson(self):
+        self.client.force_login(self.teacher)
+        url = reverse("schedule_edit", args=[self.group.pk])
+        lesson = {"weekday": 2, "lesson_number": 3, "week_type": "numerator", "subject": "  физика ", "room": "210"}
+        self.assertRedirects(self.client.post(url, lesson), url)
+        self.assertRedirects(self.client.post(url, {**lesson, "room": "305"}), url)
+
+        item = self.group.schedule_items.get()
+        self.assertEqual((item.subject, item.room, item.week_type), (self.physics, "305", "numerator"))
+        self.assertContains(self.client.get(url), "Левая")
+
+        delete_url = reverse("schedule_item_delete", args=[self.group.pk, item.pk])
+        self.assertRedirects(self.client.post(delete_url), url)
+        self.assertFalse(self.group.schedule_items.exists())
+
+    def test_new_subject_is_created(self):
+        self.client.force_login(self.teacher)
+        self.client.post(
+            reverse("schedule_edit", args=[self.group.pk]),
+            {"weekday": 1, "lesson_number": 1, "week_type": "every", "subject": "Робототехника"},
+        )
+        self.assertTrue(Subject.objects.filter(name="Робототехника").exists())
+
+    def test_student_cannot_edit(self):
+        self.client.force_login(self.student)
+        self.assertRedirects(
+            self.client.get(reverse("schedule_edit", args=[self.group.pk])),
+            reverse("home"),
+            target_status_code=302,
+        )

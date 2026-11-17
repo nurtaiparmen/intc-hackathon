@@ -10,7 +10,7 @@
     <h1 class="today__date">Проверьте расписание</h1>
     <p class="today__meta">
       Распознано пар: {{ parsed.lessons|length }}{% if parsed.group_name %}, на фото группа «{{ parsed.group_name }}»{% endif %}.
-      Сверьте с оригиналом: ИИ может ошибиться в аудитории или типе недели.
+      Сверьте с оригиналом: ИИ может ошибиться в аудитории или в том, левая неделя или правая.
     </p>
   </div>
 </header>
@@ -31,7 +31,7 @@
           <td>{{ lesson.subject }}</td>
           <td>{{ lesson.room|default:"" }}</td>
           <td>{{ lesson.teacher|default:"" }}</td>
-          <td>{% if lesson.week_type == "numerator" %}Числитель{% elif lesson.week_type == "denominator" %}Знаменатель{% else %}Каждую{% endif %}</td>
+          <td>{% if lesson.week_type == "numerator" %}Левая{% elif lesson.week_type == "denominator" %}Правая{% else %}Каждую{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>

@@ -2,11 +2,8 @@ from django import forms
 from django.conf import settings
 from django.utils import timezone
 
-from .models import Homework, ScheduleItem, Subject, User
+from .models import Homework, ScheduleItem, Subject, User, Weekday, WeekType
 from .utils import get_schedule
-
-ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/webp", "image/heic", "image/heif"}
-
 
 def _lesson_choices():
     return [
@@ -86,6 +83,54 @@ class ReplacementForm(forms.Form):
         return item
 
 
+class RegularLessonForm(forms.Form):
+    """Пара постоянного расписания. Если слот уже занят — пара в нём обновляется."""
+
+    weekday = forms.TypedChoiceField(label="День", coerce=int, choices=Weekday.choices[:6])
+    lesson_number = forms.TypedChoiceField(label="Пара", coerce=int, choices=_lesson_choices)
+    week_type = forms.ChoiceField(
+        label="Неделя",
+        choices=[
+            (WeekType.EVERY, "Каждую неделю"),
+            (WeekType.NUMERATOR, "Только левая"),
+            (WeekType.DENOMINATOR, "Только правая"),
+        ],
+    )
+    subject = forms.CharField(
+        label="Предмет", max_length=150, widget=forms.TextInput(attrs={"list": "subjects"})
+    )
+    room = forms.CharField(label="Аудитория", max_length=30, required=False)
+    teacher = forms.ModelChoiceField(
+        label="Преподаватель",
+        queryset=User.objects.filter(role=User.Role.TEACHER),
+        required=False,
+        empty_label="Не указан",
+    )
+
+    def __init__(self, *args, group, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.group = group
+
+    def clean_subject(self):
+        return " ".join(self.cleaned_data["subject"].split())
+
+    def save(self) -> ScheduleItem:
+        data = self.cleaned_data
+        wanted = data["subject"].casefold()
+        subject = next((s for s in Subject.objects.all() if s.name.casefold() == wanted), None)
+        if subject is None:
+            subject = Subject.objects.create(name=data["subject"])
+        item, _ = ScheduleItem.objects.update_or_create(
+            group=self.group,
+            is_replacement=False,
+            weekday=data["weekday"],
+            lesson_number=data["lesson_number"],
+            week_type=data["week_type"],
+            defaults={"subject": subject, "room": data["room"], "teacher": data["teacher"]},
+        )
+        return item
+
+
 class HomeworkForm(forms.ModelForm):
     class Meta:
         model = Homework
@@ -106,17 +151,12 @@ class HomeworkForm(forms.ModelForm):
         return deadline
 
 
-class ScheduleImageForm(forms.Form):
-    image = forms.FileField(
-        label="Фото или скриншот расписания",
-        widget=forms.ClearableFileInput(attrs={"accept": "image/*"}),
+class ScheduleTextForm(forms.Form):
+    text = forms.CharField(
+        label="Текст расписания",
+        max_length=settings.MAX_SCHEDULE_TEXT_LENGTH,
+        widget=forms.Textarea(
+            attrs={"rows": 10, "placeholder": "Скопируйте таблицу из Excel, Word или Telegram — или загрузите фото выше"}
+        ),
+        error_messages={"required": "Загрузите фото или вставьте текст расписания."},
     )
-
-    def clean_image(self):
-        image = self.cleaned_data["image"]
-        if image.content_type not in ALLOWED_IMAGE_TYPES:
-            raise forms.ValidationError("Нужна картинка: PNG, JPEG или WebP.")
-        if image.size > settings.MAX_SCHEDULE_IMAGE_SIZE:
-            limit_mb = settings.MAX_SCHEDULE_IMAGE_SIZE // (1024 * 1024)
-            raise forms.ValidationError(f"Файл больше {limit_mb} МБ. Сожмите фото или сделайте скриншот.")
-        return image

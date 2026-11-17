@@ -78,8 +78,8 @@ class Subject(models.Model):
 
 class WeekType(models.TextChoices):
     EVERY = "every", "Каждую неделю"
-    NUMERATOR = "numerator", "Числитель"
-    DENOMINATOR = "denominator", "Знаменатель"
+    NUMERATOR = "numerator", "Левая"
+    DENOMINATOR = "denominator", "Правая"
 
 
 class Weekday(models.IntegerChoices):
@@ -228,3 +228,29 @@ class Homework(models.Model):
 
     def __str__(self):
         return f"{self.group} / {self.subject}: {self.title}"
+
+
+class Submission(models.Model):
+    """Отметка преподавателя: студент сдал задание. Нет отметки после срока — долг."""
+
+    homework = models.ForeignKey(
+        Homework, verbose_name="Задание", on_delete=models.CASCADE, related_name="submissions"
+    )
+    student = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="Студент",
+        on_delete=models.CASCADE,
+        limit_choices_to={"role": "student"},
+        related_name="submissions",
+    )
+    marked_at = models.DateTimeField("Отмечено", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Сдача задания"
+        verbose_name_plural = "Сдачи заданий"
+        constraints = [
+            models.UniqueConstraint(fields=["homework", "student"], name="submission_unique_student")
+        ]
+
+    def __str__(self):
+        return f"{self.student} сдал «{self.homework.title}»"

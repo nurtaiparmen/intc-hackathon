@@ -16,7 +16,7 @@ urlpatterns = [
     path("logout/", auth_views.LogoutView.as_view(), name="logout"),
     # Студент
     path("student/", views.student_dashboard, name="student_dashboard"),
-    path("student/chat/", views.student_chat, name="student_chat"),
+    path("chat/", views.agent_chat, name="agent_chat"),
     # Преподаватель
     path("teacher/", views.teacher_dashboard, name="teacher_dashboard"),
     path("teacher/groups/<int:group_id>/", views.teacher_group, name="teacher_group"),
@@ -39,6 +39,21 @@ urlpatterns = [
         "teacher/groups/<int:group_id>/homework/<int:homework_id>/delete/",
         views.homework_delete,
         name="homework_delete",
+    ),
+    path(
+        "teacher/groups/<int:group_id>/homework/<int:homework_id>/check/",
+        views.homework_check,
+        name="homework_check",
+    ),
+    path(
+        "teacher/groups/<int:group_id>/schedule/",
+        views.schedule_edit,
+        name="schedule_edit",
+    ),
+    path(
+        "teacher/groups/<int:group_id>/schedule/<int:item_id>/delete/",
+        views.schedule_item_delete,
+        name="schedule_item_delete",
     ),
     path(
         "teacher/groups/<int:group_id>/schedule/upload/",

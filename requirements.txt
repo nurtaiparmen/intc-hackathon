@@ -1,3 +1,4 @@
 Django>=5.2,<7
-google-genai>=3.4,<4
+openai>=1.40
+pydantic>=2.0
 python-dotenv>=1.0

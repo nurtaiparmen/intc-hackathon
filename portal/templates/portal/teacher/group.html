@@ -91,22 +91,48 @@
           <div class="row__main">
             <p class="row__label">{{ homework.subject }}</p>
             <p class="row__title">{{ homework.title }}</p>
-            <p class="row__due">Сдать до {{ homework.deadline|date:"j E, H:i" }}</p>
+            <p class="row__due{% if homework.is_overdue %} row__due--past{% endif %}">{% if homework.is_overdue %}Срок прошёл {{ homework.deadline|date:"j E" }}{% else %}Сдать до {{ homework.deadline|date:"j E, H:i" }}{% endif %} · сдали {{ homework.done_count }} из {{ students_count }}</p>
           </div>
-          <form method="post" action="{% url 'homework_delete' group.pk homework.pk %}">
-            {% csrf_token %}
-            <button class="btn btn--text btn--danger" type="submit">Удалить</button>
-          </form>
+          <div class="row__actions">
+            <a class="btn btn--quiet btn--small" href="{% url 'homework_check' group.pk homework.pk %}">Отметить сдачу</a>
+            <form method="post" action="{% url 'homework_delete' group.pk homework.pk %}">
+              {% csrf_token %}
+              <button class="btn btn--text btn--danger" type="submit">Удалить</button>
+            </form>
+          </div>
         </li>
         {% endfor %}
       </ul>
       {% endif %}
     </section>
 
+    <section class="section" id="debtors">
+      <h2>Должники</h2>
+      {% if debtors %}
+      <ul class="rows">
+        {% for entry in debtors %}
+        <li class="row">
+          <div class="row__main">
+            <p class="row__title">{{ entry.student }}</p>
+            <p class="row__text">{% for homework in entry.debts %}{{ homework.subject }}: {{ homework.title }}{% if not forloop.last %}
+{% endif %}{% endfor %}</p>
+          </div>
+          <span class="tag tag--bad">{{ entry.debts|length }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="empty">Долгов нет: все просроченные задания отмечены как сданные.</p>
+      {% endif %}
+    </section>
+
     <section class="section">
-      <h2>Новое расписание по фото</h2>
-      <p class="section__hint">Загрузите фото или скриншот таблицы — ИИ распознает пары, а вы проверите результат перед сохранением.</p>
-      <a class="btn btn--quiet" href="{% url 'schedule_upload' group.pk %}">Загрузить фото расписания</a>
+      <h2>Постоянное расписание</h2>
+      <p class="section__hint">Загрузите фото или вставьте текст — ИИ распознает пары, а вы проверите результат. Или поправьте пары вручную.</p>
+      <div class="actions actions--tight">
+        <a class="btn" href="{% url 'schedule_upload' group.pk %}">Распознать через ИИ</a>
+        <a class="btn btn--quiet" href="{% url 'schedule_edit' group.pk %}">Редактировать вручную</a>
+      </div>
     </section>
   </div>
 </div>

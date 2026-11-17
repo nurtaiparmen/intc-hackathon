@@ -20,7 +20,7 @@
       <a class="row" href="{% url 'teacher_group' group.pk %}">
         <div class="row__main">
           <p class="row__title">{{ group.name }}</p>
-          <p class="row__text">Студентов: {{ group.students_count }}. Сегодня пар: {{ group.today_lessons|length }}. Активных заданий: {{ group.homework_count }}.</p>
+          <p class="row__text">Студентов: {{ group.students_count }}. Сегодня пар: {{ group.today_lessons|length }}. Активных заданий: {{ group.homework_count }}. Должников: {{ group.debtors_count }}.</p>
         </div>
         <span class="btn btn--quiet btn--small">Открыть</span>
       </a>

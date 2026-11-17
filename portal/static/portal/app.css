@@ -86,10 +86,11 @@ a { color: var(--ink); }
 .today__meta { margin-top: 0.5rem; font-size: 0.9375rem; color: var(--muted); }
 .today__back { display: inline-block; margin-bottom: 0.5rem; font-size: 0.875rem; }
 
-.fraction { display: inline-grid; justify-items: center; line-height: 1; }
-.fraction__part { padding: 0.375rem 0.25rem; font-size: 0.8125rem; color: var(--muted); opacity: 0.75; }
-.fraction__part.is-active { font-size: 1.0625rem; font-weight: 700; color: var(--ink); opacity: 1; }
-.fraction__bar { width: 100%; height: 2px; background: var(--graphite); }
+.weekside { display: inline-grid; justify-items: center; gap: 0.375rem; }
+.weekside__switch { display: grid; grid-template-columns: 1fr 1fr; padding: 3px; border: 1px solid var(--rule); border-radius: 999px; background: var(--sheet); }
+.weekside__part { padding: 0.4375rem 0.875rem; border-radius: 999px; font-size: 0.875rem; font-weight: 600; color: var(--muted); text-align: center; }
+.weekside__part.is-active { background: var(--ink); color: #fff; }
+.weekside__caption { font-size: 0.75rem; color: var(--muted); }
 
 /* --- Пары ------------------------------------------------------------------ */
 
@@ -145,6 +146,34 @@ a { color: var(--ink); }
 .row form { margin: 0; flex: none; }
 a.row { color: inherit; text-decoration: none; }
 a.row:hover { background: var(--ink-soft); }
+
+.row__actions { display: flex; flex: none; align-items: center; gap: 0.75rem; }
+.row__due--past { color: var(--muted); }
+.row--debt { box-shadow: inset 3px 0 0 var(--red); }
+.row--done .row__title { color: var(--muted); }
+
+.tag { flex: none; align-self: center; padding: 0.1875rem 0.5rem; border-radius: 999px; font-size: 0.8125rem; font-weight: 600; }
+.tag--ok { background: #e6f4ea; color: #1e6b34; }
+.tag--bad { min-width: 1.75rem; text-align: center; background: var(--red-soft); color: var(--red); }
+
+/* --- Задания и долги ------------------------------------------------------- */
+
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+.stat { display: grid; gap: 0.125rem; padding: 0.875rem 1rem; background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--radius); color: inherit; text-decoration: none; }
+.stat:hover { border-color: var(--ink); }
+.stat__num { font-size: 1.75rem; line-height: 1; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.stat__label { font-size: 0.875rem; color: var(--muted); }
+.stat--bad { border-color: var(--red); background: var(--red-soft); }
+.stat--bad .stat__num { color: var(--red); }
+
+.subject-block + .subject-block { margin-top: 1rem; }
+.subject-block__name { margin-bottom: 0.375rem; font-size: 0.9375rem; font-weight: 600; color: var(--ink); }
+
+.checklist__tools { display: flex; gap: 1rem; margin-bottom: 0.5rem; font-size: 0.875rem; }
+.checklist__item { align-items: center; cursor: pointer; }
+.checklist__item:hover { background: var(--ink-soft); }
+.checklist__item input { width: 1.25rem; height: 1.25rem; accent-color: var(--ink); }
+.checklist li + li { border-top: 1px solid var(--rule); }
 
 /* --- Неделя ---------------------------------------------------------------- */
 
@@ -228,6 +257,9 @@ a.row:hover { background: var(--ink-soft); }
 .table th, .table td { padding: 0.5rem 0.75rem; text-align: left; vertical-align: top; border-top: 1px solid var(--rule); }
 .table thead th { border-top: 0; font-size: 0.8125rem; font-weight: 600; color: var(--muted); white-space: nowrap; }
 .table td:first-child { font-weight: 700; color: var(--ink); }
+.section__after { margin-top: 0.75rem; }
+.actions--tight { margin-top: 0; }
+@media (min-width: 60rem) { .sticky { position: sticky; top: 1rem; } }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1.25rem; margin-top: 1.5rem; }
 
 /* --- Чат-помощник ---------------------------------------------------------- */
@@ -283,4 +315,10 @@ a.row:hover { background: var(--ink-soft); }
 .msg--bot, .msg--pending, .msg--error { align-self: flex-start; background: var(--paper); border-bottom-left-radius: 4px; }
 .msg--pending { color: var(--muted); }
 .msg--refused { background: var(--red-soft); }
+.msg p { margin: 0; }
+.msg__actions { margin: 0.5rem 0 0; padding: 0.5rem 0.625rem; list-style: none; font-size: 0.8125rem; background: #e6f4ea; color: #1e6b34; border-radius: 8px; white-space: normal; }
+.msg__actions li + li { margin-top: 0.25rem; }
+.msg__actions li::before { content: "✓ "; font-weight: 700; }
+.msg__tag { display: inline-block; margin-top: 0.375rem; font-size: 0.75rem; color: var(--muted); }
+.chat__head-actions { display: flex; gap: 0.875rem; font-size: 0.875rem; }
 .msg--error { background: var(--red-soft); color: var(--red); }

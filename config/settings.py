@@ -108,21 +108,31 @@ BELL_SCHEDULE = {
 # База знаний чат-бота: обычный текстовый файл, правится без кода.
 COLLEGE_KNOWLEDGE_FILE = BASE_DIR / "portal" / "knowledge" / "college.md"
 
-# --- AI (Google Gemini) ------------------------------------------------------
+# --- ИИ-агент ---------------------------------------------------------------
+# Любой OpenAI-совместимый API. По умолчанию Groq (бесплатный ключ:
+# https://console.groq.com/keys). Для локальной модели через Ollama:
+# LLM_BASE_URL=http://localhost:11434/v1, LLM_API_KEY=ollama, LLM_MODEL=qwen3:8b.
+# Без ключа агент работает в запасном режиме по ключевым словам.
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_VISION_MODEL = os.getenv("GEMINI_VISION_MODEL", "gemini-3.8-flash")
-GEMINI_CHAT_MODEL = os.getenv("GEMINI_CHAT_MODEL", "gemini-3.5-flash-lite")
-# Глубина «размышлений» модели: low — быстрее и дешевле.
-# Пустая строка — не отправлять параметр (нужно для моделей Gemini 2.5).
-GEMINI_THINKING_LEVEL = os.getenv("GEMINI_THINKING_LEVEL", "low")
-GEMINI_TIMEOUT_SECONDS = int(os.getenv("GEMINI_TIMEOUT_SECONDS", "120"))
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.groq.com/openai/v1")
+LLM_API_KEY = os.getenv("LLM_API_KEY", "")
+LLM_MODEL = os.getenv("LLM_MODEL", "llama-3.3-70b-versatile")
+# Если основная модель перегружена или упёрлась в лимит, запрос уходит в следующую.
+LLM_FALLBACK_MODELS = [
+    name.strip()
+    for name in os.getenv("LLM_FALLBACK_MODELS", "openai/gpt-oss-120b,qwen/qwen3-32b,llama-3.1-8b-instant").split(",")
+    if name.strip()
+]
+LLM_TIMEOUT_SECONDS = int(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
+LLM_RETRIES = int(os.getenv("LLM_RETRIES", "1"))
+LLM_RETRY_DELAY = float(os.getenv("LLM_RETRY_DELAY", "2"))
+AGENT_MAX_STEPS = 6  # сколько раз подряд агент может вызвать инструменты за один вопрос
 
 # Защита чат-бота от нецелевого расхода токенов.
 CHAT_MAX_QUESTION_LENGTH = 500  # символов в одном вопросе
-CHAT_MAX_OUTPUT_TOKENS = 1024  # потолок ответа (включая «размышления»)
+CHAT_MAX_OUTPUT_TOKENS = 1024  # потолок одного ответа модели
 CHAT_HISTORY_TURNS = 3  # сколько прошлых пар «вопрос-ответ» помнит бот
-CHAT_RATE_LIMIT = 15  # сообщений от одного студента...
+CHAT_RATE_LIMIT = 20  # сообщений от одного пользователя...
 CHAT_RATE_WINDOW = 10 * 60  # ...за это число секунд
 
-MAX_SCHEDULE_IMAGE_SIZE = 8 * 1024 * 1024  # 8 МБ
+MAX_SCHEDULE_TEXT_LENGTH = 8000

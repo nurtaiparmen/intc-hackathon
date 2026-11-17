@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from django.conf import settings
 from django.utils import timezone
 
-from .models import Homework, ScheduleItem, Weekday, WeekType
+from .models import ScheduleItem, Submission, Weekday, WeekType
 
 
 def _monday(d: date) -> date:
@@ -90,44 +90,52 @@ def get_week_schedule(group, any_date: date | None = None) -> list[dict]:
     ]
 
 
-def build_student_context(user) -> str:
-    """Короткая текстовая сводка для чат-бота: кто спрашивает, пары и ДЗ."""
-    today = timezone.localdate()
-    week_type = WeekType(get_week_type(today)).label.lower()
-    lines = [
-        f"Сегодня {today:%d.%m.%Y}, {Weekday(today.isoweekday()).label.lower()}.",
-        f"Идёт {get_week_number(today)}-я учебная неделя, тип недели: {week_type}.",
-    ]
+def semester_homeworks(group):
+    """Задания группы с начала семестра: и будущие, и просроченные."""
+    return group.homeworks.filter(deadline__date__gte=settings.SEMESTER_START).select_related(
+        "subject", "teacher"
+    )
+
+
+def student_homework_status(user) -> dict:
+    """Долги, предстоящие задания по предметам и сданное для одного студента."""
     group = user.study_group
+    empty = {"debts": [], "upcoming": [], "by_subject": [], "upcoming_count": 0}
     if group is None:
-        return "\n".join(lines)
+        return empty
+    now = timezone.now()
+    done = set(Submission.objects.filter(student=user).values_list("homework_id", flat=True))
+    debts, upcoming = [], []
+    for homework in semester_homeworks(group).order_by("deadline"):
+        homework.is_done = homework.pk in done
+        if homework.deadline < now:
+            if not homework.is_done:
+                debts.append(homework)
+        else:
+            upcoming.append(homework)
 
-    lines.append(f"Студент учится в группе {group.name}. Расписание группы на эту неделю:")
-    for day in get_week_schedule(group, today):
-        if not day["lessons"]:
-            continue
-        lines.append(f"{day['weekday']} ({day['date']:%d.%m}):")
-        for item in day["lessons"]:
-            start, end = item.times
-            time_range = f"{start:%H:%M}-{end:%H:%M}" if start and end else "время не указано"
-            if item.is_cancelled:
-                lines.append(f"  {item.lesson_number} пара ({time_range}): ОТМЕНЕНА")
-                continue
-            parts = [item.subject.name]
-            if item.room:
-                parts.append(f"ауд. {item.room}")
-            if item.teacher:
-                parts.append(str(item.teacher))
-            if item.is_replacement:
-                parts.append("ЗАМЕНА")
-            lines.append(f"  {item.lesson_number} пара ({time_range}): {', '.join(parts)}")
+    by_subject = {}
+    for homework in upcoming:
+        by_subject.setdefault(homework.subject.name, []).append(homework)
+    return {
+        "debts": debts,
+        "upcoming": upcoming,
+        "by_subject": [{"subject": name, "items": items} for name, items in sorted(by_subject.items())],
+        "upcoming_count": sum(1 for h in upcoming if not h.is_done),
+    }
 
-    homeworks = Homework.objects.filter(group=group, deadline__gte=timezone.now()).select_related(
-        "subject"
-    )[:10]
-    if homeworks:
-        lines.append("Актуальные домашние задания:")
-        for hw in homeworks:
-            deadline = timezone.localtime(hw.deadline)
-            lines.append(f"  {hw.subject.name}: {hw.title} (сдать до {deadline:%d.%m %H:%M})")
-    return "\n".join(lines)
+
+def group_debtors(group) -> list[dict]:
+    """Студенты группы с долгами: кто и по каким заданиям."""
+    overdue = list(semester_homeworks(group).filter(deadline__lt=timezone.now()))
+    if not overdue:
+        return []
+    done = set(
+        Submission.objects.filter(homework__in=overdue).values_list("homework_id", "student_id")
+    )
+    result = []
+    for student in group.students.order_by("last_name", "first_name"):
+        debts = [hw for hw in overdue if (hw.pk, student.pk) not in done]
+        if debts:
+            result.append({"student": student, "debts": debts})
+    return result

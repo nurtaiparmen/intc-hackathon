@@ -1,6 +1,8 @@
-{# Тип недели в виде дроби: активная часть выделена. Ожидает переменную week_type. #}
-<div class="fraction" role="img" aria-label="Сейчас {{ week_type.label|lower }}">
-  <span class="fraction__part{% if week_type == 'numerator' %} is-active{% endif %}">числитель</span>
-  <span class="fraction__bar"></span>
-  <span class="fraction__part{% if week_type == 'denominator' %} is-active{% endif %}">знаменатель</span>
+{# Тип недели: левая (числитель) или правая (знаменатель). Ожидает week_type. #}
+<div class="weekside" role="img" aria-label="Сейчас {{ week_type.label|lower }} неделя">
+  <div class="weekside__switch">
+    <span class="weekside__part{% if week_type == 'numerator' %} is-active{% endif %}">Левая</span>
+    <span class="weekside__part{% if week_type == 'denominator' %} is-active{% endif %}">Правая</span>
+  </div>
+  <span class="weekside__caption">{% if week_type == 'numerator' %}неделя · числитель{% else %}неделя · знаменатель{% endif %}</span>
 </div>

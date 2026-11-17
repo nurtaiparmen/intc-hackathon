@@ -10,9 +10,17 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
-from portal.models import Group, Homework, ScheduleItem, Subject, User, WeekType
+from portal.models import Group, Homework, ScheduleItem, Subject, Submission, User, WeekType
 
 DEMO_PASSWORD = "demo12345"
+
+CLASSMATES = [
+    ("aigerim", "Айгерим", "Нурланова"),
+    ("daniyar", "Данияр", "Ахметов"),
+    ("maria", "Мария", "Ким"),
+    ("erlan", "Ерлан", "Садыков"),
+    ("alina", "Алина", "Петрова"),
+]
 
 # (день недели, номер пары, предмет, аудитория, тип недели)
 SCHEDULE = [
@@ -46,7 +54,11 @@ class Command(BaseCommand):
 
         teacher = self._user("teacher", "Анна", "Иванова", role=User.Role.TEACHER)
         teacher.teaching_groups.add(group)
-        self._user("student", "Алексей", "Смирнов", role=User.Role.STUDENT, study_group=group)
+        student = self._user("student", "Алексей", "Смирнов", role=User.Role.STUDENT, study_group=group)
+        classmates = [
+            self._user(login, first, last, role=User.Role.STUDENT, study_group=group)
+            for login, first, last in CLASSMATES
+        ]
         self._user("admin", "Админ", "Портала", is_staff=True, is_superuser=True)
 
         subjects = {
@@ -90,7 +102,11 @@ class Command(BaseCommand):
             day = timezone.localdate() + timedelta(days=days)
             return timezone.make_aware(datetime.combine(day, time(18, 0)))
 
-        Homework.objects.bulk_create(
+        def ago(days):
+            day = timezone.localdate() - timedelta(days=days)
+            return timezone.make_aware(datetime.combine(day, time(18, 0)))
+
+        homeworks = Homework.objects.bulk_create(
             [
                 Homework(
                     group=group, subject=subjects["Веб-разработка"], teacher=teacher,
@@ -109,11 +125,40 @@ class Command(BaseCommand):
                     description="ER-диаграмма и SQL-скрипт создания таблиц.",
                     deadline=evening(7),
                 ),
+                Homework(
+                    group=group, subject=subjects["Базы данных"],
+                    title="Лабораторная №3: запросы SELECT и JOIN",
+                    deadline=ago(5),
+                ),
+                Homework(
+                    group=group, subject=subjects["Английский язык"],
+                    title="Эссе «My future profession»",
+                    deadline=ago(9),
+                ),
+                Homework(
+                    group=group, subject=subjects["Программирование на Python"], teacher=teacher,
+                    title="Задачи 1–11 по циклам",
+                    deadline=ago(2),
+                ),
             ]
+        )
+
+        upcoming_python, lab, essay, loops = homeworks[1], homeworks[3], homeworks[4], homeworks[5]
+        submitted = {
+            upcoming_python: [student],
+            lab: classmates[:3],
+            essay: [student, *classmates[:4]],
+            loops: classmates[1:],
+        }
+        Submission.objects.bulk_create(
+            Submission(homework=homework, student=who)
+            for homework, students in submitted.items()
+            for who in students
         )
 
         self.stdout.write(self.style.SUCCESS("Демо-данные готовы."))
         self.stdout.write(f"Логины: student, teacher, admin. Пароль у всех: {DEMO_PASSWORD}")
+        self.stdout.write("У student два долга, чтобы было что показать.")
 
     def _user(self, username, first_name, last_name, **fields):
         user, created = User.objects.get_or_create(

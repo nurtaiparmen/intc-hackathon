@@ -21,28 +21,62 @@
     {% include "portal/_lessons.html" with lessons=today_lessons empty_text="Сегодня пар нет." %}
   </section>
 
-  <section class="section">
-    <h2>Домашние задания</h2>
-    {% if homeworks %}
+  <section class="section" id="tasks">
+    <div class="stats">
+      <a class="stat{% if debts %} stat--bad{% endif %}" href="#debts">
+        <span class="stat__num">{{ debts|length }}</span>
+        <span class="stat__label">{% if debts %}долгов{% else %}долгов нет{% endif %}</span>
+      </a>
+      <a class="stat" href="#homework">
+        <span class="stat__num">{{ upcoming_count }}</span>
+        <span class="stat__label">заданий впереди</span>
+      </a>
+    </div>
+  </section>
+
+  {% if debts %}
+  <section class="section" id="debts">
+    <h2>Мои долги</h2>
+    <p class="section__hint">Срок прошёл, а преподаватель не отметил сдачу. Если вы уже сдали — напишите преподавателю.</p>
     <ul class="rows">
-      {% for homework in homeworks %}
-      <li class="row">
+      {% for homework in debts %}
+      <li class="row row--debt">
         <div class="row__main">
           <p class="row__label">{{ homework.subject }}</p>
           <p class="row__title">{{ homework.title }}</p>
-          {% if homework.description %}<p class="row__text">{{ homework.description }}</p>{% endif %}
-          <p class="row__due{% if homework.is_soon %} row__due--soon{% endif %}">Сдать до {{ homework.deadline|date:"j E, H:i" }}</p>
+          <p class="row__due row__due--soon">Срок был {{ homework.deadline|date:"j E" }}{% if homework.teacher %} · {{ homework.teacher }}{% endif %}</p>
         </div>
       </li>
       {% endfor %}
     </ul>
-    {% else %}
-    <p class="empty">Заданий пока нет.</p>
-    {% endif %}
+  </section>
+  {% endif %}
+
+  <section class="section" id="homework">
+    <h2>Задания по предметам</h2>
+    {% for block in by_subject %}
+    <div class="subject-block">
+      <h3 class="subject-block__name">{{ block.subject }}</h3>
+      <ul class="rows">
+        {% for homework in block.items %}
+        <li class="row{% if homework.is_done %} row--done{% endif %}">
+          <div class="row__main">
+            <p class="row__title">{{ homework.title }}</p>
+            {% if homework.description %}<p class="row__text">{{ homework.description }}</p>{% endif %}
+            <p class="row__due{% if homework.is_soon and not homework.is_done %} row__due--soon{% endif %}">Сдать до {{ homework.deadline|date:"j E, H:i" }}</p>
+          </div>
+          {% if homework.is_done %}<span class="tag tag--ok">Сдано</span>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% empty %}
+    <p class="empty">Предстоящих заданий нет.</p>
+    {% endfor %}
   </section>
 
   <section class="section" id="week">
-    <h2>Неделя {{ week_number }}, {{ week_type.label|lower }}</h2>
+    <h2>Неделя {{ week_number }} · {{ week_type.label|lower }}</h2>
     <nav class="weeknav" aria-label="Листать недели">
       <a href="?date={{ prev_week|date:'Y-m-d' }}#week">Прошлая неделя</a>
       <a href="?date={{ next_week|date:'Y-m-d' }}#week">Следующая неделя</a>
@@ -59,8 +93,4 @@
     {% endfor %}
   </section>
 {% endif %}
-{% endblock %}
-
-{% block extra %}
-  {% if group %}{% include "portal/_chat.html" %}{% endif %}
 {% endblock %}

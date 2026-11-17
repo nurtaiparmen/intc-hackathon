@@ -1,0 +1,74 @@
+{% extends "portal/base.html" %}
+
+{% block title %}Расписание группы {{ group }}{% endblock %}
+{% block page_class %}page page--wide{% endblock %}
+
+{% block content %}
+<header class="today">
+  <div>
+    <a class="today__back" href="{% url 'teacher_group' group.pk %}">Группа {{ group }}</a>
+    <h1 class="today__date">Постоянное расписание</h1>
+    <p class="today__meta">Пары, которые повторяются каждую неделю или только по левой/правой. Разовые изменения делайте через замену.</p>
+  </div>
+</header>
+
+<div class="columns">
+  <div>
+    {% for day in days %}
+    <section class="section">
+      <h2>{{ day.weekday }}</h2>
+      {% if day.lessons %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Пара</th><th>Неделя</th><th>Предмет</th><th>Ауд.</th><th></th></tr></thead>
+          <tbody>
+            {% for item in day.lessons %}
+            <tr>
+              <td>{{ item.lesson_number }}</td>
+              <td>{% if item.week_type == "numerator" %}Левая{% elif item.week_type == "denominator" %}Правая{% else %}Каждую{% endif %}</td>
+              <td>{{ item.subject }}{% if item.teacher %}<br><span class="hint">{{ item.teacher }}</span>{% endif %}</td>
+              <td>{{ item.room }}</td>
+              <td>
+                <form method="post" action="{% url 'schedule_item_delete' group.pk item.pk %}">
+                  {% csrf_token %}
+                  <button class="btn btn--text btn--danger" type="submit">Удалить</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="empty">Пар нет.</p>
+      {% endif %}
+    </section>
+    {% endfor %}
+  </div>
+
+  <div>
+    <section class="section sticky">
+      <h2>Добавить или изменить пару</h2>
+      <p class="section__hint">Если в этом слоте уже есть пара, она заменится.</p>
+      <form class="form" method="post">
+        {% csrf_token %}
+        <div class="form__pair">
+          {% include "portal/_field.html" with field=form.weekday %}
+          {% include "portal/_field.html" with field=form.lesson_number %}
+        </div>
+        {% include "portal/_field.html" with field=form.week_type %}
+        {% include "portal/_field.html" with field=form.subject %}
+        <div class="form__pair">
+          {% include "portal/_field.html" with field=form.room %}
+          {% include "portal/_field.html" with field=form.teacher %}
+        </div>
+        <div><button class="btn" type="submit">Сохранить пару</button></div>
+      </form>
+      <datalist id="subjects">
+        {% for subject in subjects %}<option value="{{ subject.name }}">{% endfor %}
+      </datalist>
+      <p class="hint section__after"><a href="{% url 'schedule_upload' group.pk %}">Распознать всё расписание через ИИ</a></p>
+    </section>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,48 @@
+{% extends "portal/base.html" %}
+
+{% block title %}Сдача задания{% endblock %}
+
+{% block content %}
+<header class="today">
+  <div>
+    <a class="today__back" href="{% url 'teacher_group' group.pk %}#homework">Группа {{ group }}</a>
+    <h1 class="today__date">{{ homework.title }}</h1>
+    <p class="today__meta">{{ homework.subject }} · срок {{ homework.deadline|date:"j E, H:i" }} · сдали {{ done_count }} из {{ students|length }}</p>
+  </div>
+</header>
+
+<section class="section">
+  {% if students %}
+  <form method="post">
+    {% csrf_token %}
+    <p class="section__hint">Отметьте, кто сдал. Кто не отмечен после срока — попадёт в должники.</p>
+    <div class="checklist__tools">
+      <button class="btn btn--text" type="button" data-check="all">Отметить всех</button>
+      <button class="btn btn--text" type="button" data-check="none">Снять все</button>
+    </div>
+    <ul class="rows checklist">
+      {% for student in students %}
+      <li>
+        <label class="row checklist__item">
+          <span class="row__title">{{ student }}</span>
+          <input type="checkbox" name="done" value="{{ student.pk }}"{% if student.is_done %} checked{% endif %}>
+        </label>
+      </li>
+      {% endfor %}
+    </ul>
+    <div class="actions"><button class="btn" type="submit">Сохранить</button></div>
+  </form>
+  {% else %}
+  <p class="empty">В группе пока нет студентов. Их привязывают в админ-панели.</p>
+  {% endif %}
+</section>
+
+<script>
+  document.querySelectorAll("[data-check]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      const value = button.dataset.check === "all";
+      document.querySelectorAll('input[name="done"]').forEach(function (box) { box.checked = value; });
+    });
+  });
+</script>
+{% endblock %}

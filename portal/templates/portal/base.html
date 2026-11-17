@@ -30,6 +30,6 @@
     {% block content %}{% endblock %}
   </main>
 
-  {% block extra %}{% endblock %}
+  {% block extra %}{% if user.is_teacher or user.study_group_id %}{% include "portal/_chat.html" %}{% endif %}{% endblock %}
 </body>
 </html>

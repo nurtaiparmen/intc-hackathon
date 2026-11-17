@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 
-from .models import Group, Homework, ScheduleItem, Subject, User
+from .models import Group, Homework, ScheduleItem, Subject, Submission, User
 
 
 @admin.register(User)
@@ -45,3 +45,9 @@ class HomeworkAdmin(admin.ModelAdmin):
     list_display = ("title", "group", "subject", "deadline", "teacher")
     list_filter = ("group", "subject")
     autocomplete_fields = ("subject",)
+
+
+@admin.register(Submission)
+class SubmissionAdmin(admin.ModelAdmin):
+    list_display = ("homework", "student", "marked_at")
+    list_filter = ("homework__group", "homework__subject")
